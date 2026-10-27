@@ -24,18 +24,14 @@ public class WmsSupplierServiceImpl extends ServiceImpl<WmsSupplierMapper, WmsSu
     /** 直辖市：北京、上海、天津、重庆。下级是区，不保存城市。 */
     private static final Set<Integer> MUNICIPALITY_PROVINCE_IDS = Set.of(1, 2, 3, 4);
 
-    private final Object idLock = new Object();
-
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean save(WmsSupplier entity) {
-        synchronized (idLock) {
-            prepareInsert(entity, null);
-            return super.save(entity);
-        }
+        prepareInsert(entity);
+        return super.save(entity);
     }
 
     @Override
@@ -52,37 +48,23 @@ public class WmsSupplierServiceImpl extends ServiceImpl<WmsSupplierMapper, WmsSu
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean saveBatch(Collection<WmsSupplier> entityList, int batchSize) {
-        synchronized (idLock) {
-            int nextId = queryMaxId();
-            for (WmsSupplier entity : entityList) {
-                nextId = prepareInsert(entity, nextId);
-            }
-            return super.saveBatch(entityList, batchSize);
+        for (WmsSupplier entity : entityList) {
+            prepareInsert(entity);
         }
+        return super.saveBatch(entityList, batchSize);
     }
 
     /**
-     * 补齐新增必填项。id 按全表最大值加一（含已逻辑删除记录），is_del 默认 1。
-     *
-     * @param assignedMax 批量插入时已占用的最大 id；单条插入传 null
-     * @return 本条记录使用的 id
+     * 补齐新增必填项。id 留给数据库自增，is_del 默认 1。
      */
-    private int prepareInsert(WmsSupplier entity, Integer assignedMax) {
+    private void prepareInsert(WmsSupplier entity) {
         clearCityForMunicipality(entity);
+        entity.setId(null);
         if (entity.getIsDel() == null) {
             entity.setIsDel(1);
         }
-        if (entity.getId() != null) {
-            return entity.getId();
-        }
-        int nextId = (assignedMax == null ? queryMaxId() : assignedMax) + 1;
-        entity.setId(nextId);
-        return nextId;
     }
 
-    /**
-     * 直接查库，避开逻辑删除拦截，避免与已删除主键冲突。
-     */
     /**
      * 直辖市不保存城市（下级是区，不能当城市选）。
      *
@@ -94,10 +76,5 @@ public class WmsSupplierServiceImpl extends ServiceImpl<WmsSupplierMapper, WmsSu
         }
         entity.setCityCode(null);
         return true;
-    }
-
-    private int queryMaxId() {
-        Integer maxId = jdbcTemplate.queryForObject("SELECT IFNULL(MAX(id), 0) FROM wms_supplier", Integer.class);
-        return maxId == null ? 0 : maxId;
     }
 }

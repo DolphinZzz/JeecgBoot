@@ -29,8 +29,8 @@ import lombok.experimental.Accessors;
 public class WmsSupplier implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    /**主键（表无自增，新增时由服务端按 MAX(id)+1 赋值）*/
-    @TableId(type = IdType.INPUT)
+    /**主键，由数据库自增生成*/
+    @TableId(type = IdType.AUTO)
     @Schema(description = "主键")
     private Integer id;
 
