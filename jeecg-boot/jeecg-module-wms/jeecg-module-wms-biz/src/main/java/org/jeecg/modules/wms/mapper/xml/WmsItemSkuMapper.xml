@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsItemSkuMapper">
+
+    <select id="selectByMainId" resultType="org.jeecg.modules.wms.entity.WmsItemSku">
+        SELECT *
+        FROM wms_item_sku
+        WHERE spu_id = #{mainId}
+          AND is_del = 1
+        ORDER BY id
+    </select>
+</mapper>

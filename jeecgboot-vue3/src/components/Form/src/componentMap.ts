@@ -68,6 +68,7 @@ componentMap.set('JCodeEditor', createAsyncComponent(() => import('./jeecg/compo
 componentMap.set('JCategorySelect', createAsyncComponent(() => import('./jeecg/components/JCategorySelect.vue')));
 componentMap.set('JSelectMultiple', createAsyncComponent(() => import('./jeecg/components/JSelectMultiple.vue')));
 componentMap.set('JSelectSingle', createAsyncComponent(() => import('./jeecg/components/JSelectSingle.vue')));
+componentMap.set('JSelectRecord', createAsyncComponent(() => import('./jeecg/components/JSelectRecord.vue')));
 componentMap.set('JPopup', createAsyncComponent(() => import('./jeecg/components/JPopup.vue')));
 // 代码逻辑说明: 【QQYUN-7961】popupDict字典
 componentMap.set('JPopupDict', createAsyncComponent(() => import('./jeecg/components/JPopupDict.vue')));

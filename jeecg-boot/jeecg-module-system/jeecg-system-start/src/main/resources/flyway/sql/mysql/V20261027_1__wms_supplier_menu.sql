@@ -16,7 +16,7 @@ WHERE NOT EXISTS (SELECT 1 FROM sys_permission WHERE id = '179307527735921');
 
 -- 供应商信息（有按钮子级，is_leaf=0）
 INSERT INTO sys_permission(id, parent_id, name, url, component, component_name, redirect, menu_type, perms, perms_type, sort_no, always_show, icon, is_route, is_leaf, keep_alive, hidden, hide_tab, description, status, del_flag, rule_flag, create_by, create_time, update_by, update_time, internal_or_external)
-SELECT '179307527735901', '179307527735921', '供应商信息', '/wms/base/wmsSupplierList', 'wms/WmsSupplierList', 'wms-wmsSupplier', NULL, 1, NULL, '0', 1.00, 0, 'ant-design:team-outlined', 1, 0, 0, 0, 0, NULL, '1', 0, 0, 'admin', '2026-10-27 00:00:00', NULL, NULL, 0
+SELECT '179307527735901', '179307527735921', '供应商信息', '/wms/base/wmsSupplierList', 'wms/WmsSupplier/WmsSupplierList', 'wms-wmsSupplier', NULL, 1, NULL, '0', 1.00, 0, 'ant-design:team-outlined', 1, 0, 0, 0, 0, NULL, '1', 0, 0, 'admin', '2026-10-27 00:00:00', NULL, NULL, 0
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_permission WHERE id = '179307527735901');
 
@@ -121,7 +121,7 @@ SET component = 'layouts/default/index',
 WHERE id = '179307527735921';
 
 UPDATE sys_permission
-SET component = 'wms/WmsSupplierList',
+SET component = 'wms/WmsSupplier/WmsSupplierList',
     component_name = 'wms-wmsSupplier',
     perms_type = '0',
     icon = 'ant-design:team-outlined'

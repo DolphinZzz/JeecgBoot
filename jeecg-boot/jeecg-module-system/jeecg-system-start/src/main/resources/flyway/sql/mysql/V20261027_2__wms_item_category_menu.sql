@@ -4,7 +4,7 @@
 
 -- 商品类别设置（有按钮子级，is_leaf=0）
 INSERT INTO sys_permission(id, parent_id, name, url, component, component_name, redirect, menu_type, perms, perms_type, sort_no, always_show, icon, is_route, is_leaf, keep_alive, hidden, hide_tab, description, status, del_flag, rule_flag, create_by, create_time, update_by, update_time, internal_or_external)
-SELECT '179308423398501', '179307527735921', '商品类别设置', '/wms/base/wmsItemCategoryList', 'wms/WmsItemCategoryList', 'wms-wmsItemCategory', NULL, 1, NULL, '0', 2.00, 0, 'ant-design:apartment-outlined', 1, 0, 0, 0, 0, NULL, '1', 0, 0, 'admin', '2026-10-27 00:00:00', NULL, NULL, 0
+SELECT '179308423398501', '179307527735921', '商品类别设置', '/wms/base/wmsItemCategoryList', 'wms/WmsItemCategory/WmsItemCategoryList', 'wms-wmsItemCategory', NULL, 1, NULL, '0', 2.00, 0, 'ant-design:apartment-outlined', 1, 0, 0, 0, 0, NULL, '1', 0, 0, 'admin', '2026-10-27 00:00:00', NULL, NULL, 0
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_permission WHERE id = '179308423398501');
 
