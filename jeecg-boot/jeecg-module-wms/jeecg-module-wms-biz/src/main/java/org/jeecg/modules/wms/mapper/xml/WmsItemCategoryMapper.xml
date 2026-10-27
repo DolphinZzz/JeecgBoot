@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsItemCategoryMapper">
+
+    <select id="queryListByPid" resultType="org.jeecg.common.system.vo.SelectTreeModel">
+        select cast(id as char) as "key",
+               name as "title",
+               cast(parent_id as char) as "parentId",
+               (case when exists (
+                   select 1 from wms_item_category child
+                   where child.parent_id = wms_item_category.id and child.is_del = 1
+               ) then 0 else 1 end) as "isLeaf"
+        from wms_item_category
+        where is_del = 1
+        <choose>
+            <when test="parentId != null">
+                and parent_id = #{parentId}
+            </when>
+            <otherwise>
+                and (parent_id is null or parent_id = 0)
+            </otherwise>
+        </choose>
+        order by sort asc, id asc
+    </select>
+
+</mapper>
