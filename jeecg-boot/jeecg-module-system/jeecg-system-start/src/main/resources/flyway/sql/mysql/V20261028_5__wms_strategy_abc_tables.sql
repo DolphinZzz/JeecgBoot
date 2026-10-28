@@ -1,0 +1,116 @@
+-- WMS 表结构演进 第 5 步（对应方案 4.4 顺序 5）：上架策略与 ABC 分类。
+-- wms_strategy_config 为键值对，warehouse_id = 0 是全局默认，仓库级同名配置覆盖全局；
+-- 这样后续新增策略参数只需插数据，不用改表结构。
+
+CREATE TABLE IF NOT EXISTS `wms_strategy_config` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `warehouse_id` int NOT NULL DEFAULT 0 COMMENT '仓库ID(0为全局默认，仓库级配置覆盖全局)',
+  `config_group` varchar(30) NOT NULL COMMENT '参数分组(ABC 商品ABC / LOCA 库位等级 / PUTAWAY 上架 / ZONE 分区)',
+  `config_key` varchar(60) NOT NULL COMMENT '参数键',
+  `config_value` varchar(255) NOT NULL COMMENT '参数值',
+  `remark` varchar(255) DEFAULT NULL COMMENT '参数说明',
+  `saas_id` varchar(60) DEFAULT NULL COMMENT 'SaaS标识',
+  `create_time` datetime NOT NULL COMMENT '创建时间',
+  `create_by` varchar(30) DEFAULT NULL COMMENT '创建人账号',
+  `update_time` datetime DEFAULT NULL COMMENT '修改时间',
+  `update_by` varchar(30) DEFAULT NULL COMMENT '修改人账号',
+  `is_del` int DEFAULT 1 COMMENT '是否删除 1未删除 2已删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_strategy_wh_key` (`warehouse_id`,`config_key`),
+  KEY `idx_strategy_group` (`config_group`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC COMMENT='仓库策略参数表';
+
+CREATE TABLE IF NOT EXISTS `wms_abc_calc_batch` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `batch_code` varchar(50) NOT NULL COMMENT '批次号',
+  `warehouse_id` int NOT NULL COMMENT '仓库ID',
+  `trigger_type` int NOT NULL DEFAULT 1 COMMENT '触发方式(1定时 2手工 3导入)',
+  `calc_mode` varchar(20) NOT NULL DEFAULT 'FREQ' COMMENT '计算模式(FREQ频次 AMOUNT金额 COMPOSITE综合)',
+  `window_start` datetime DEFAULT NULL COMMENT '统计窗口开始',
+  `window_end` datetime DEFAULT NULL COMMENT '统计窗口结束',
+  `param_snapshot` text COMMENT '计算参数快照(JSON)',
+  `sku_total` int NOT NULL DEFAULT 0 COMMENT '参与计算SKU数',
+  `a_count` int NOT NULL DEFAULT 0 COMMENT 'A类数量',
+  `b_count` int NOT NULL DEFAULT 0 COMMENT 'B类数量',
+  `c_count` int NOT NULL DEFAULT 0 COMMENT 'C类数量',
+  `up_count` int NOT NULL DEFAULT 0 COMMENT '较上期升级数量',
+  `down_count` int NOT NULL DEFAULT 0 COMMENT '较上期降级数量',
+  `missing_price_count` int NOT NULL DEFAULT 0 COMMENT '缺失价格SKU数(金额口径按0计)',
+  `relocate_suggest_count` int NOT NULL DEFAULT 0 COMMENT '生成移库建议条数',
+  `status` int NOT NULL DEFAULT 1 COMMENT '状态(1计算中 2待确认 3已生效 4已作废 5已跳过 6计算失败)',
+  `error_msg` varchar(500) DEFAULT NULL COMMENT '失败或跳过原因',
+  `apply_by` varchar(30) DEFAULT NULL COMMENT '确认生效人',
+  `apply_time` datetime DEFAULT NULL COMMENT '生效时间',
+  `saas_id` varchar(60) DEFAULT NULL COMMENT 'SaaS标识',
+  `create_time` datetime NOT NULL COMMENT '创建时间',
+  `create_by` varchar(30) DEFAULT NULL COMMENT '创建人账号',
+  `update_time` datetime DEFAULT NULL COMMENT '修改时间',
+  `update_by` varchar(30) DEFAULT NULL COMMENT '修改人账号',
+  `is_del` int DEFAULT 1 COMMENT '是否删除 1未删除 2已删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_abc_batch_code` (`batch_code`),
+  KEY `idx_abc_batch_wh_status` (`warehouse_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC COMMENT='ABC分类计算批次表';
+
+-- 等级按「仓库 + SKU」存明细表：SPU 的 abc_class 是全局唯一值，区分不了仓库，
+-- 也区分不了同一 SPU 下不同规格的动销差异。
+CREATE TABLE IF NOT EXISTS `wms_abc_class_result` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `batch_id` bigint NOT NULL COMMENT '计算批次ID',
+  `warehouse_id` int NOT NULL COMMENT '仓库ID',
+  `sku_id` bigint NOT NULL COMMENT '规格ID',
+  `pick_freq` int NOT NULL DEFAULT 0 COMMENT '窗口内拣货频次',
+  `out_qty` int NOT NULL DEFAULT 0 COMMENT '窗口内出库数量',
+  `out_amount` decimal(16,2) NOT NULL DEFAULT 0.00 COMMENT '窗口内出库金额',
+  `score` decimal(12,8) NOT NULL DEFAULT 0 COMMENT '综合得分(全仓份额)',
+  `rank_no` int NOT NULL DEFAULT 0 COMMENT '排名',
+  `cum_ratio` decimal(10,6) NOT NULL DEFAULT 0 COMMENT '累计占比',
+  `calc_class` varchar(2) NOT NULL COMMENT '公式计算等级',
+  `prev_class` varchar(2) DEFAULT NULL COMMENT '上期生效等级',
+  `final_class` varchar(2) NOT NULL COMMENT '生效等级',
+  `adjust_reason` varchar(30) DEFAULT NULL COMMENT '调整原因(MANUAL_LOCK人工锁定 NEW_ITEM新品保护 A_CAP A类封顶 DOWN_BUFFER降级缓冲)',
+  `down_pending` int NOT NULL DEFAULT 0 COMMENT '连续降级计数',
+  `manual_lock` int NOT NULL DEFAULT 0 COMMENT '人工锁定(1是 0否)',
+  `manual_class` varchar(2) DEFAULT NULL COMMENT '人工指定等级',
+  `is_current` int NOT NULL DEFAULT 0 COMMENT '是否当前生效(1是 0否)',
+  `saas_id` varchar(60) DEFAULT NULL COMMENT 'SaaS标识',
+  `create_time` datetime NOT NULL COMMENT '创建时间',
+  `create_by` varchar(30) DEFAULT NULL COMMENT '创建人账号',
+  `update_time` datetime DEFAULT NULL COMMENT '修改时间',
+  `update_by` varchar(30) DEFAULT NULL COMMENT '修改人账号',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_abc_result_batch_sku` (`batch_id`,`sku_id`),
+  KEY `idx_abc_result_current` (`warehouse_id`,`sku_id`,`is_current`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC COMMENT='ABC分类明细表';
+
+-- 全局默认策略参数（与方案 3.5.8 一致）。分区阈值单位为基准单位 mm / g / cm³ / 元。
+-- 使用 INSERT IGNORE，重复执行不会覆盖已在页面上调整过的值。
+INSERT IGNORE INTO `wms_strategy_config` (`warehouse_id`,`config_group`,`config_key`,`config_value`,`remark`,`create_time`,`create_by`) VALUES
+(0,'ABC','abc_calc_mode','FREQ','计算模式 FREQ频次/AMOUNT金额/COMPOSITE综合',NOW(),'admin'),
+(0,'ABC','abc_window_days','90','统计窗口天数',NOW(),'admin'),
+(0,'ABC','abc_a_threshold','0.80','A类累计占比阈值',NOW(),'admin'),
+(0,'ABC','abc_b_threshold','0.95','B类累计占比阈值',NOW(),'admin'),
+(0,'ABC','abc_weight_freq','0.7','综合模式频次权重',NOW(),'admin'),
+(0,'ABC','abc_weight_amount','0.3','综合模式金额权重',NOW(),'admin'),
+(0,'ABC','abc_a_max_sku_ratio','0.30','A类SKU数量上限占比',NOW(),'admin'),
+(0,'ABC','abc_min_sku_count','10','参与计算的最少SKU数，不足则跳过',NOW(),'admin'),
+(0,'ABC','abc_new_item_protect_days','30','新品保护天数',NOW(),'admin'),
+(0,'ABC','abc_new_item_default_class','B','新品保护期默认等级',NOW(),'admin'),
+(0,'ABC','abc_down_confirm_times','2','降级需连续确认期数',NOW(),'admin'),
+(0,'ABC','abc_calc_interval_days','30','自动重算最小间隔天数',NOW(),'admin'),
+(0,'ABC','abc_auto_apply','0','计算后自动生效 1是 0否',NOW(),'admin'),
+(0,'ABC','relocate_max_suggest','50','每期最多生成移库建议条数',NOW(),'admin'),
+(0,'LOCA','loca_weight_distance','0.6','库位得分距离权重',NOW(),'admin'),
+(0,'LOCA','loca_weight_ergo','0.4','库位得分人体工学权重',NOW(),'admin'),
+(0,'LOCA','loca_a_ratio','0.2','A类库位数量占比',NOW(),'admin'),
+(0,'LOCA','loca_b_ratio','0.3','B类库位数量占比',NOW(),'admin'),
+(0,'PUTAWAY','putaway_default_strategy','ABC','仓库默认上架策略 FIXED/ABC/NEAREST',NOW(),'admin'),
+(0,'PUTAWAY','putaway_prefer_same_sku','1','同品集中优先 1是 0否',NOW(),'admin'),
+(0,'PUTAWAY','putaway_allow_upgrade_occupy','0','低等级商品可占用高等级库位 1是 0否',NOW(),'admin'),
+(0,'PUTAWAY','fixed_overflow_strategy','ABC','固定库位放满后的溢出策略',NOW(),'admin'),
+(0,'PUTAWAY','fixed_loca_lend_when_empty','0','固定库位空闲时可借给其他SKU 1是 0否',NOW(),'admin'),
+(0,'ZONE','zone_valuable_price','5000','贵品单价阈值(元)',NOW(),'admin'),
+(0,'ZONE','zone_large_volume','125000','大件单件体积阈值(cm³，约50×50×50cm)',NOW(),'admin'),
+(0,'ZONE','zone_large_weight','25000','大件单件重量阈值(g)',NOW(),'admin'),
+(0,'ZONE','zone_large_side','1200','大件最长边阈值(mm)',NOW(),'admin'),
+(0,'ZONE','zone_small_volume','1000','小件单件体积阈值(cm³，约10×10×10cm)',NOW(),'admin');

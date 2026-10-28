@@ -26,6 +26,15 @@ spring:
       - optional:classpath:config/application-liteflow.yml
       - optional:nacos:jeecg.yaml
       - optional:nacos:jeecg-@profile.name@.yaml
+
+# 微服务版数据库自动升级开关（见 org.jeecg.config.flyway.FlywayConfig）。
+# 不能复用 spring.flyway.enabled：nacos 的 jeecg-dev.yaml 中该值为 false（用于关闭
+# Spring Boot 自带的 Flyway 自动装配，jeecg.yaml 里同时排除了 FlywayAutoConfiguration），
+# 沿用同名属性会被 nacos 覆盖而始终不执行迁移。
+# 脚本目录 locations 仍复用 nacos 中的 spring.flyway.locations = classpath:flyway/sql/mysql。
+jeecg:
+  flyway:
+    enabled: true
 #  #shardingjdbc数据源
 #  datasource:
 #    dynamic:
