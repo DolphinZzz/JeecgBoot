@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsWarehouseOperationsMapper">
+
+    <select id="selectDetailsByOperationId" resultType="org.jeecg.modules.wms.entity.WmsWarehouseOperationsDetails">
+        SELECT *
+        FROM wms_warehouse_operations_details
+        WHERE warehouse_operations_id = #{operationId}
+        ORDER BY id
+    </select>
+</mapper>

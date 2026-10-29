@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsItemSnMapper">
+
+    <select id="selectSnPage" resultType="org.jeecg.modules.wms.vo.WmsItemSnPage">
+        SELECT
+            n.id, n.sn_code, n.sku_id, n.batch_number, n.warehouse_id, n.warehouse_area_loca_id,
+            n.quality_status, n.entry_order_id, n.outbound_order_id, n.mes_work_order_no, n.status,
+            n.create_time, n.create_by, n.update_time, n.update_by,
+            w.name AS warehouse_name,
+            l.loca_code,
+            s.code AS sku_code
+        FROM wms_item_sn n
+        LEFT JOIN wms_warehouse w ON w.id = n.warehouse_id
+        LEFT JOIN wms_warehouse_area_loca l ON l.id = n.warehouse_area_loca_id
+        LEFT JOIN wms_item_sku s ON s.id = n.sku_id
+        WHERE n.is_del = 1
+        <if test="q.snCode != null and q.snCode != ''">
+            AND n.sn_code LIKE CONCAT('%', #{q.snCode}, '%')
+        </if>
+        <if test="q.skuId != null">
+            AND n.sku_id = #{q.skuId}
+        </if>
+        <if test="q.batchNumber != null and q.batchNumber != ''">
+            AND n.batch_number = #{q.batchNumber}
+        </if>
+        <if test="q.warehouseId != null">
+            AND n.warehouse_id = #{q.warehouseId}
+        </if>
+        <if test="q.warehouseAreaLocaId != null">
+            AND n.warehouse_area_loca_id = #{q.warehouseAreaLocaId}
+        </if>
+        <if test="q.mesWorkOrderNo != null and q.mesWorkOrderNo != ''">
+            AND n.mes_work_order_no = #{q.mesWorkOrderNo}
+        </if>
+        <if test="q.status != null">
+            AND n.status = #{q.status}
+        </if>
+        <if test="q.entryOrderId != null">
+            AND n.entry_order_id = #{q.entryOrderId}
+        </if>
+        <if test="q.outboundOrderId != null">
+            AND n.outbound_order_id = #{q.outboundOrderId}
+        </if>
+        ORDER BY n.id DESC
+    </select>
+</mapper>

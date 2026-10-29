@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsInventoryMapper">
+
+    <!--
+      效期状态：1 正常 / 2 临期 / 3 过期 / 4 无有效期
+      临期阈值按 SKU 所属 SPU 的 near_expire_days（决策 D5：按商品配置），未配置时按 30 天。
+    -->
+    <sql id="expireStatusExpr">
+        CASE
+            WHEN i.expire_date IS NULL THEN 4
+            WHEN i.expire_date &lt; CURDATE() THEN 3
+            WHEN i.expire_date &lt;= DATE_ADD(CURDATE(), INTERVAL IFNULL(p.near_expire_days, 30) DAY) THEN 2
+            ELSE 1
+        END
+    </sql>
+
+    <select id="selectInventoryPage" resultType="org.jeecg.modules.wms.vo.WmsInventoryPage">
+        SELECT
+            i.id, i.warehouse_id, i.warehouse_area_id, i.warehouse_area_loca_id,
+            i.consignor_id, i.sku_id, i.batch_number, i.prod_date, i.expire_date,
+            i.quality_status, i.total_count, i.available_count, i.locked_count, i.frozen_count,
+            i.used_volume, i.used_weight, i.version,
+            i.create_time, i.create_by, i.update_time, i.update_by,
+            w.name AS warehouse_name,
+            a.name AS area_name,
+            l.loca_code,
+            l.storage_condition,
+            s.code AS sku_code,
+            p.title AS spu_title,
+            c.customer_name AS consignor_name,
+            <include refid="expireStatusExpr"/> AS expire_status
+        FROM wms_inventory i
+        LEFT JOIN wms_warehouse w ON w.id = i.warehouse_id
+        LEFT JOIN wms_warehouse_area a ON a.id = i.warehouse_area_id
+        LEFT JOIN wms_warehouse_area_loca l ON l.id = i.warehouse_area_loca_id
+        LEFT JOIN wms_item_sku s ON s.id = i.sku_id
+        LEFT JOIN wms_item_spu p ON p.id = s.spu_id
+        LEFT JOIN wms_customer c ON c.id = i.consignor_id
+        WHERE i.is_del = 1
+        <if test="q.warehouseId != null">
+            AND i.warehouse_id = #{q.warehouseId}
+        </if>
+        <if test="q.warehouseAreaId != null">
+            AND i.warehouse_area_id = #{q.warehouseAreaId}
+        </if>
+        <if test="q.warehouseAreaLocaId != null">
+            AND i.warehouse_area_loca_id = #{q.warehouseAreaLocaId}
+        </if>
+        <if test="q.consignorId != null">
+            AND i.consignor_id = #{q.consignorId}
+        </if>
+        <if test="q.skuId != null">
+            AND i.sku_id = #{q.skuId}
+        </if>
+        <if test="q.skuCode != null and q.skuCode != ''">
+            AND s.code LIKE CONCAT('%', #{q.skuCode}, '%')
+        </if>
+        <if test="q.spuTitle != null and q.spuTitle != ''">
+            AND p.title LIKE CONCAT('%', #{q.spuTitle}, '%')
+        </if>
+        <if test="q.batchNumber != null and q.batchNumber != ''">
+            AND i.batch_number = #{q.batchNumber}
+        </if>
+        <if test="q.qualityStatus != null">
+            AND i.quality_status = #{q.qualityStatus}
+        </if>
+        <if test="q.storageCondition != null and q.storageCondition != ''">
+            AND l.storage_condition = #{q.storageCondition}
+        </if>
+        <if test="q.expireStatus != null">
+            AND <include refid="expireStatusExpr"/> = #{q.expireStatus}
+        </if>
+        <if test="q.locaCode != null and q.locaCode != ''">
+            AND l.loca_code LIKE CONCAT('%', #{q.locaCode}, '%')
+        </if>
+        <!--
+          按 SN 过滤：SN 落在 wms_item_sn 上，先用它把范围收敛到
+          (库位, SKU, 批次, 质量状态) 组合，再回库存表取数量。
+          EXISTS 而非 JOIN，避免一个库位有多件 SN 时库存行被放大。
+        -->
+        <if test="q.snCode != null and q.snCode != ''">
+            AND EXISTS (
+                SELECT 1 FROM wms_item_sn sn
+                WHERE sn.warehouse_area_loca_id = i.warehouse_area_loca_id
+                  AND sn.sku_id = i.sku_id
+                  AND sn.batch_number = i.batch_number
+                  AND sn.sn_code LIKE CONCAT('%', #{q.snCode}, '%')
+                  AND sn.is_del = 1
+            )
+        </if>
+        <if test="q.onlyAvailable == null or q.onlyAvailable">
+            AND i.total_count &gt; 0
+        </if>
+        ORDER BY i.warehouse_id, i.warehouse_area_loca_id, i.sku_id, i.batch_number
+    </select>
+
+    <!--
+      按唯一键 uk_inv_dim 取库存行并加行锁。不加 is_del 过滤：
+      唯一键里没有 is_del，若过滤掉已删除行，重新创建会撞唯一键。
+    -->
+    <select id="selectByDimensionForUpdate" resultType="org.jeecg.modules.wms.entity.WmsInventory">
+        SELECT *
+        FROM wms_inventory
+        WHERE warehouse_area_loca_id = #{d.warehouseAreaLocaId}
+          AND sku_id = #{d.skuId}
+          AND batch_number = #{d.batchNumberOrDefault}
+          AND consignor_id = #{d.consignorIdOrDefault}
+          AND quality_status = #{d.qualityStatusOrDefault}
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <!--
+      数量回写。调用方已持有该行的行锁，这里只做精确赋值 + version 自增，
+      四个数量的恒等式由 Java 侧校验后传入。
+    -->
+    <update id="updateCounts">
+        UPDATE wms_inventory
+        SET total_count = #{totalCount},
+            available_count = #{availableCount},
+            locked_count = #{lockedCount},
+            frozen_count = #{frozenCount},
+            is_del = #{isDel},
+            version = version + 1,
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <select id="sumTotalCount" resultType="java.lang.Long">
+        SELECT IFNULL(SUM(i.total_count), 0)
+        FROM wms_inventory i
+        WHERE i.is_del = 1
+        <if test="warehouseId != null">
+            AND i.warehouse_id = #{warehouseId}
+        </if>
+        <if test="skuId != null">
+            AND i.sku_id = #{skuId}
+        </if>
+    </select>
+</mapper>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsInventoryLogMapper">
+
+    <select id="selectLogPage" resultType="org.jeecg.modules.wms.vo.WmsInventoryLogPage">
+        SELECT
+            g.id, g.inventory_id, g.biz_type, g.biz_no,
+            g.warehouse_id, g.warehouse_area_id, g.warehouse_area_loca_id,
+            g.consignor_id, g.sku_id, g.batch_number,
+            g.change_count, g.before_count, g.after_count, g.remark,
+            g.create_time, g.create_by,
+            w.name AS warehouse_name,
+            a.name AS area_name,
+            l.loca_code,
+            s.code AS sku_code,
+            c.customer_name AS consignor_name
+        FROM wms_inventory_log g
+        LEFT JOIN wms_warehouse w ON w.id = g.warehouse_id
+        LEFT JOIN wms_warehouse_area a ON a.id = g.warehouse_area_id
+        LEFT JOIN wms_warehouse_area_loca l ON l.id = g.warehouse_area_loca_id
+        LEFT JOIN wms_item_sku s ON s.id = g.sku_id
+        LEFT JOIN wms_customer c ON c.id = g.consignor_id
+        WHERE 1 = 1
+        <if test="q.inventoryId != null">
+            AND g.inventory_id = #{q.inventoryId}
+        </if>
+        <if test="q.warehouseId != null">
+            AND g.warehouse_id = #{q.warehouseId}
+        </if>
+        <if test="q.warehouseAreaLocaId != null">
+            AND g.warehouse_area_loca_id = #{q.warehouseAreaLocaId}
+        </if>
+        <if test="q.skuId != null">
+            AND g.sku_id = #{q.skuId}
+        </if>
+        <if test="q.batchNumber != null and q.batchNumber != ''">
+            AND g.batch_number = #{q.batchNumber}
+        </if>
+        <if test="q.bizType != null">
+            AND g.biz_type = #{q.bizType}
+        </if>
+        <if test="q.bizNo != null and q.bizNo != ''">
+            AND g.biz_no LIKE CONCAT('%', #{q.bizNo}, '%')
+        </if>
+        <if test="q.beginTime != null and q.beginTime != ''">
+            AND g.create_time &gt;= #{q.beginTime}
+        </if>
+        <if test="q.endTime != null and q.endTime != ''">
+            AND g.create_time &lt;= #{q.endTime}
+        </if>
+        ORDER BY g.id DESC
+    </select>
+</mapper>
