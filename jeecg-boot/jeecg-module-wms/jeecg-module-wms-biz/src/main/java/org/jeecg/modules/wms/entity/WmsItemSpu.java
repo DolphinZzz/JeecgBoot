@@ -91,6 +91,42 @@ public class WmsItemSpu implements Serializable {
     @Schema(description = "供应商")
     private Integer supplierId;
 
+    /**初始/兜底ABC等级(实际生效等级见 wms_abc_class_result)*/
+    @Excel(name = "ABC分类", width = 10, dicCode = "wms_abc_class")
+    @Dict(dicCode = "wms_abc_class")
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    @Schema(description = "初始/兜底ABC等级")
+    private String abcClass;
+
+    /**存储条件(字典 wms_storage_condition)*/
+    @Excel(name = "存储条件", width = 15, dicCode = "wms_storage_condition")
+    @Dict(dicCode = "wms_storage_condition")
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    @Schema(description = "存储条件")
+    private String storageCondition;
+
+    /**是否贵品(1是 0否)，用于分区推导*/
+    @Excel(name = "是否贵品", width = 10)
+    @Schema(description = "是否贵品(1是 0否)")
+    private Integer isValuable;
+
+    /**是否效期管理(1是 0否)*/
+    @Excel(name = "效期管理", width = 10)
+    @Schema(description = "是否效期管理(1是 0否)")
+    private Integer isShelfLife;
+
+    /**保质期天数*/
+    @Excel(name = "保质期天数", width = 12)
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    @Schema(description = "保质期天数")
+    private Integer shelfLifeDays;
+
+    /**临期禁出阈值天数（决策 D5：按商品配置，仓库不设全局值）*/
+    @Excel(name = "临期禁出天数", width = 12)
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    @Schema(description = "临期禁出阈值天数")
+    private Integer nearExpireDays;
+
     /**重量单位，商品下所有规格共用*/
     @Excel(name = "重量单位", width = 15)
     @Schema(description = "重量单位 mg/g/kg")

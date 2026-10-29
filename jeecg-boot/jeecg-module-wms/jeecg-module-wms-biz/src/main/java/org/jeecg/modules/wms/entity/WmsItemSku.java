@@ -11,6 +11,7 @@ import lombok.Data;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.jeecgframework.poi.excel.annotation.Excel;
+import org.jeecg.common.aspect.annotation.Dict;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
@@ -52,6 +53,33 @@ public class WmsItemSku implements Serializable {
     @Excel(name = "商品条码", width = 15)
     @Schema(description = "商品条码")
     private String code;
+
+    /**默认质检方式(1免检 2抽检 3全检)*/
+    @Excel(name = "质检方式", width = 12, dicCode = "wms_qc_type")
+    @Dict(dicCode = "wms_qc_type")
+    @Schema(description = "默认质检方式(1免检 2抽检 3全检)")
+    private Integer qcType;
+
+    /**是否SN管理(1是 0否，决策 D2：按商品开关)*/
+    @Excel(name = "SN管理", width = 10)
+    @Schema(description = "是否SN管理(1是 0否)")
+    private Integer isSnManaged;
+
+    /**拣货区补货触发下限*/
+    @Excel(name = "补货下限", width = 12)
+    @Schema(description = "拣货区补货触发下限")
+    private Integer minStock;
+
+    /**拣货区最大安全库存*/
+    @Excel(name = "安全库存上限", width = 12)
+    @Schema(description = "拣货区最大安全库存")
+    private Integer maxStock;
+
+    /**上架策略(FIXED固定 ABC驱动 NEAREST就近)，为空用仓库默认*/
+    @Excel(name = "上架策略", width = 12, dicCode = "wms_putaway_strategy")
+    @Dict(dicCode = "wms_putaway_strategy")
+    @Schema(description = "上架策略(FIXED固定 ABC驱动 NEAREST就近)")
+    private String putawayStrategy;
 
     /**SKU标题，页面不展示*/
     @Schema(description = "商品标题", hidden = true)

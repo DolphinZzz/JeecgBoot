@@ -114,6 +114,26 @@ public class WmsItemSpuServiceImpl extends ServiceImpl<WmsItemSpuMapper, WmsItem
         entity.setWeightUnit(requireMeasureUnit(entity.getWeightUnit(), WEIGHT_UNITS, "重量单位"));
         entity.setLengthUnit(requireMeasureUnit(entity.getLengthUnit(), LENGTH_UNITS, "长度单位"));
         entity.setVolumeUnit(requireMeasureUnit(entity.getVolumeUnit(), VOLUME_UNITS, "体积单位"));
+
+        // WMS 属性默认值与校验
+        if (entity.getIsValuable() == null) {
+            entity.setIsValuable(0);
+        }
+        if (entity.getIsShelfLife() == null) {
+            entity.setIsShelfLife(0);
+        }
+        if (Integer.valueOf(1).equals(entity.getIsShelfLife())) {
+            if (entity.getShelfLifeDays() == null || entity.getShelfLifeDays() <= 0) {
+                throw new JeecgBootException("开启效期管理时，保质期天数必须大于0");
+            }
+            if (entity.getNearExpireDays() != null && entity.getNearExpireDays() > entity.getShelfLifeDays()) {
+                throw new JeecgBootException("临期禁出天数不能大于保质期天数");
+            }
+        } else {
+            // 未开启效期管理时，清空无意义的效期字段，避免脏数据
+            entity.setShelfLifeDays(null);
+            entity.setNearExpireDays(null);
+        }
         if (entity.getDescription() == null) {
             return;
         }
@@ -154,6 +174,27 @@ public class WmsItemSpuServiceImpl extends ServiceImpl<WmsItemSpuMapper, WmsItem
             sku.setId(null);
             sku.setCode(code);
             sku.setSpuId(spuId);
+            if (sku.getQcType() == null) {
+                sku.setQcType(2);
+            }
+            if (sku.getIsSnManaged() == null) {
+                sku.setIsSnManaged(0);
+            }
+            if (sku.getMinStock() == null) {
+                sku.setMinStock(0);
+            }
+            if (sku.getMaxStock() == null) {
+                sku.setMaxStock(0);
+            }
+            if (sku.getMinStock() < 0) {
+                throw new JeecgBootException("补货触发下限不能小于0");
+            }
+            if (sku.getMaxStock() < 0) {
+                throw new JeecgBootException("安全库存上限不能小于0");
+            }
+            if (sku.getMaxStock() > 0 && sku.getMinStock() > sku.getMaxStock()) {
+                throw new JeecgBootException("补货触发下限不能大于安全库存上限");
+            }
             if (sku.getIsDel() == null) {
                 sku.setIsDel(1);
             }

@@ -103,6 +103,10 @@ export const columns: BasicColumn[] = [
   { title: '商品体积', align: 'center', dataIndex: 'productVolume', width: 100 },
   { title: '商品成本', align: 'center', dataIndex: 'realPrice', width: 100 },
   { title: '商品价格', align: 'center', dataIndex: 'price', width: 100 },
+  { title: 'ABC分类', align: 'center', dataIndex: 'abcClass', width: 90 },
+  { title: '存储条件', align: 'center', dataIndex: 'storageCondition', width: 100 },
+  { title: '质检类型', align: 'center', dataIndex: 'qcType', width: 90 },
+  { title: '上架策略', align: 'center', dataIndex: 'putawayStrategy', width: 100 },
 ];
 
 // 查询表单 Schema
@@ -204,6 +208,69 @@ export const formSchema: FormSchema[] = [
   measureUnitField('长度单位', 'lengthUnit', lengthUnitOptions),
   measureUnitField('体积单位', 'volumeUnit', volumeUnitOptions),
   measureUnitField('重量单位', 'weightUnit', weightUnitOptions),
+  {
+    label: 'ABC分类',
+    field: 'abcClass',
+    component: 'JDictSelectTag',
+    componentProps: {
+      dictCode: 'wms_abc_class',
+      placeholder: '请选择ABC分类',
+    },
+    colProps: { span: 8 },
+  },
+  {
+    label: '存储条件',
+    field: 'storageCondition',
+    component: 'JDictSelectTag',
+    defaultValue: 'NORMAL',
+    componentProps: {
+      dictCode: 'wms_storage_condition',
+      placeholder: '请选择存储条件',
+    },
+    colProps: { span: 8 },
+  },
+  {
+    label: '是否贵品',
+    field: 'isValuable',
+    component: 'RadioGroup',
+    defaultValue: 0,
+    componentProps: {
+      options: [
+        { label: '否', value: 0 },
+        { label: '是', value: 1 },
+      ],
+    },
+    colProps: { span: 8 },
+  },
+  {
+    label: '保质期管理',
+    field: 'isShelfLife',
+    component: 'RadioGroup',
+    defaultValue: 0,
+    componentProps: {
+      options: [
+        { label: '否', value: 0 },
+        { label: '是', value: 1 },
+      ],
+    },
+    colProps: { span: 8 },
+  },
+  {
+    label: '保质期(天)',
+    field: 'shelfLifeDays',
+    component: 'InputNumber',
+    componentProps: { min: 1, placeholder: '天数' },
+    ifShow: ({ values }) => values.isShelfLife === 1,
+    colProps: { span: 8 },
+  },
+  {
+    label: '临期预警(天)',
+    field: 'nearExpireDays',
+    component: 'InputNumber',
+    componentProps: { min: 1, placeholder: '天数' },
+    ifShow: ({ values }) => values.isShelfLife === 1,
+    colProps: { span: 8 },
+  },
 ];
 
 export function parseItemSpec(spec) {
@@ -262,6 +329,17 @@ export function toItemTreeRecords(records, pageNo, pageSize, skuMap) {
         productVolume: formatMeasure(sku.productVolume, spu.volumeUnit),
         realPrice: sku.realPrice,
         price: sku.price,
+        abcClass: '-',
+        storageCondition: '-',
+        qcType: sku.qcType === 1 ? '免检' : sku.qcType === 2 ? '全检' : sku.qcType === 3 ? '抽检' : '-',
+        putawayStrategy:
+          sku.putawayStrategy === 'ABC'
+            ? 'ABC驱动'
+            : sku.putawayStrategy === 'FIXED'
+              ? '固定库位'
+              : sku.putawayStrategy === 'NEAREST'
+                ? '就近上架'
+                : sku.putawayStrategy || 'ABC驱动',
       };
     });
     const row = {
@@ -271,6 +349,10 @@ export function toItemTreeRecords(records, pageNo, pageSize, skuMap) {
       productCode: spu.subTitle || '',
       productName: spu.title,
       categoryName: categoryText(spu),
+      abcClass: spu.abcClass || '-',
+      storageCondition: spu.storageCondition_dictText || spu.storageCondition || '常温',
+      qcType: '-',
+      putawayStrategy: '-',
     };
     if (children.length) {
       row.children = children;
@@ -379,6 +461,59 @@ export const wmsItemSkuJVxeColumns: JVxeColumn[] = [
     placeholder: '请输入${title}',
     props: { min: 0, precision: 2 },
   },
+  {
+    title: '质检类型',
+    key: 'qcType',
+    type: JVxeTypes.select,
+    minWidth: 100,
+    options: [
+      { text: '免检', value: 1 },
+      { text: '全检', value: 2 },
+      { text: '抽检', value: 3 },
+    ],
+    defaultValue: 1,
+  },
+  {
+    title: '一物一码(SN)',
+    key: 'isSnManaged',
+    type: JVxeTypes.select,
+    minWidth: 110,
+    options: [
+      { text: '否', value: 0 },
+      { text: '是', value: 1 },
+    ],
+    defaultValue: 0,
+  },
+  {
+    title: '安全库存下限',
+    key: 'minStock',
+    type: JVxeTypes.inputNumber,
+    minWidth: 110,
+    placeholder: '安全库存',
+    props: { min: 0, precision: 0 },
+    defaultValue: 0,
+  },
+  {
+    title: '补货库存上限',
+    key: 'maxStock',
+    type: JVxeTypes.inputNumber,
+    minWidth: 110,
+    placeholder: '补货上限',
+    props: { min: 0, precision: 0 },
+    defaultValue: 0,
+  },
+  {
+    title: '推荐上架策略',
+    key: 'putawayStrategy',
+    type: JVxeTypes.select,
+    minWidth: 120,
+    options: [
+      { text: 'ABC驱动', value: 'ABC' },
+      { text: '固定库位', value: 'FIXED' },
+      { text: '就近上架', value: 'NEAREST' },
+    ],
+    defaultValue: 'ABC',
+  },
 ];
 
 // 高级查询配置
@@ -386,6 +521,14 @@ export const superQuerySchema = {
   title: { title: '商品名称', order: 0, view: 'text', type: 'string' },
   categoryId1: { title: '商品类别', order: 1, view: 'sel_search', type: 'number', dictTable: 'wms_item_category', dictCode: 'id', dictText: 'name' },
   description: { title: '商品描述', order: 2, view: 'text', type: 'string' },
-  supplierId: { title: '供应商名称', order: 3, view: 'sel_search', type: 'number', dictTable: 'wms_supplier', dictCode: 'id', dictText: 'supplier_name' },
+  supplierId: {
+    title: '供应商名称',
+    order: 3,
+    view: 'sel_search',
+    type: 'number',
+    dictTable: 'wms_supplier',
+    dictCode: 'id',
+    dictText: 'supplier_name',
+  },
   brandId: { title: '品牌', order: 4, view: 'sel_search', type: 'number', dictTable: 'wms_brand', dictCode: 'id', dictText: 'name' },
 };
