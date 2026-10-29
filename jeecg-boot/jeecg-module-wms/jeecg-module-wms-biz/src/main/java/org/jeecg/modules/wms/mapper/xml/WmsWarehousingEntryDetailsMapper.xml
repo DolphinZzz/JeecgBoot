@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsWarehousingEntryDetailsMapper">
+
+    <!--
+      已上架数用相关子查询：一个明细可能被拆到多个库位，JOIN 会放大明细行数。
+    -->
+    <select id="selectDetailViews" resultType="org.jeecg.modules.wms.vo.WmsEntryDetailView">
+        SELECT
+            d.id, d.sku_id, d.batch_number, d.prod_date, d.expire_date, d.count,
+            d.received_count, d.supplier_id, d.price, d.warehousing_entry_id,
+            d.real_arrival_time, d.predicted_arrival_time, d.unload_emp_id, d.unload_time,
+            d.status, d.qc_status, d.qc_pass_count, d.qc_fail_count,
+            d.create_time, d.create_by, d.update_time, d.update_by,
+            s.code AS sku_code,
+            p.title AS spu_title,
+            IFNULL(s.is_sn_managed, 0) AS is_sn_managed,
+            IFNULL(s.qc_type, 2) AS default_qc_type,
+            (SELECT IFNULL(SUM(u.count), 0) FROM wms_warehousing_entry_up u
+              WHERE u.entry_details_id = d.id AND u.status = 2 AND u.is_del = 1) AS putaway_count
+        FROM wms_warehousing_entry_details d
+        LEFT JOIN wms_item_sku s ON s.id = d.sku_id
+        LEFT JOIN wms_item_spu p ON p.id = s.spu_id
+        WHERE d.warehousing_entry_id = #{entryId}
+          AND d.is_del = 1
+        ORDER BY d.id
+    </select>
+</mapper>

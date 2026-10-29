@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsWarehousingEntryMapper">
+
+    <!--
+      收支汇总用相关子查询而不是 JOIN：一个入库单有多行明细、每行又有多条上架记录，
+      JOIN 会把行数乘起来，汇总数就虚高了。
+    -->
+    <select id="selectEntryPage" resultType="org.jeecg.modules.wms.vo.WmsEntryPage">
+        SELECT
+            e.id, e.entry_code, e.entry_type, e.erp_po_no, e.mes_work_order_no,
+            e.consignor_id, e.batch_number, e.total_count, e.predicted_arrival_time,
+            e.warehouse_id, e.damage_count, e.surpass_count, e.over_receive_audit_status,
+            e.status, e.lack_count, e.wait_supplement_flag,
+            e.create_time, e.create_by, e.update_time, e.update_by,
+            w.name AS warehouse_name,
+            w.warehouse_type AS warehouse_type,
+            c.customer_name AS consignor_name,
+            (SELECT COUNT(*) FROM wms_warehousing_entry_details d
+              WHERE d.warehousing_entry_id = e.id AND d.is_del = 1) AS detail_rows,
+            (SELECT IFNULL(SUM(d.count), 0) FROM wms_warehousing_entry_details d
+              WHERE d.warehousing_entry_id = e.id AND d.is_del = 1) AS plan_count,
+            (SELECT IFNULL(SUM(d.received_count), 0) FROM wms_warehousing_entry_details d
+              WHERE d.warehousing_entry_id = e.id AND d.is_del = 1) AS received_total,
+            (SELECT IFNULL(SUM(u.count), 0) FROM wms_warehousing_entry_up u
+              WHERE u.warehousing_entry_id = e.id AND u.status = 2 AND u.is_del = 1) AS putaway_total
+        FROM wms_warehousing_entry e
+        LEFT JOIN wms_warehouse w ON w.id = e.warehouse_id
+        LEFT JOIN wms_customer c ON c.id = e.consignor_id
+        WHERE e.is_del = 1
+        <if test="q.entryCode != null and q.entryCode != ''">
+            AND e.entry_code LIKE CONCAT('%', #{q.entryCode}, '%')
+        </if>
+        <if test="q.entryType != null">
+            AND e.entry_type = #{q.entryType}
+        </if>
+        <if test="q.warehouseId != null">
+            AND e.warehouse_id = #{q.warehouseId}
+        </if>
+        <if test="q.consignorId != null">
+            AND e.consignor_id = #{q.consignorId}
+        </if>
+        <if test="q.batchNumber != null and q.batchNumber != ''">
+            AND e.batch_number LIKE CONCAT('%', #{q.batchNumber}, '%')
+        </if>
+        <if test="q.mesWorkOrderNo != null and q.mesWorkOrderNo != ''">
+            AND e.mes_work_order_no LIKE CONCAT('%', #{q.mesWorkOrderNo}, '%')
+        </if>
+        <if test="q.erpPoNo != null and q.erpPoNo != ''">
+            AND e.erp_po_no LIKE CONCAT('%', #{q.erpPoNo}, '%')
+        </if>
+        <if test="q.status != null">
+            AND e.status = #{q.status}
+        </if>
+        <if test="q.onlyOpen != null and q.onlyOpen">
+            AND e.status NOT IN (60, 99)
+        </if>
+        ORDER BY e.create_time DESC, e.id DESC
+    </select>
+
+    <!--
+      单号唯一（uk_entry_code），不加 is_del 过滤：逻辑删除后单号仍被唯一键占用，
+      过滤掉会导致后续生成同号单据时撞键。
+    -->
+    <select id="selectByCode" resultType="org.jeecg.modules.wms.entity.WmsWarehousingEntry">
+        SELECT * FROM wms_warehousing_entry WHERE entry_code = #{entryCode} LIMIT 1
+    </select>
+</mapper>

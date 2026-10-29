@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsQualityCheckMapper">
+
+    <select id="selectQualityCheckPage" resultType="org.jeecg.modules.wms.vo.WmsQualityCheckPage">
+        SELECT
+            q.id, q.qc_code, q.warehousing_entry_id, q.entry_details_id, q.mes_work_order_no,
+            q.sku_id, q.batch_number, q.qc_type, q.check_count, q.sample_count,
+            q.pass_count, q.fail_count, q.fail_reason, q.return_order_no,
+            q.qc_emp_id, q.qc_time, q.status,
+            q.create_time, q.create_by, q.update_time, q.update_by,
+            e.entry_code,
+            e.entry_type,
+            e.warehouse_id,
+            w.name AS warehouse_name,
+            w.warehouse_type AS warehouse_type,
+            s.code AS sku_code,
+            p.title AS spu_title,
+            d.received_count
+        FROM wms_quality_check q
+        LEFT JOIN wms_warehousing_entry e ON e.id = q.warehousing_entry_id
+        LEFT JOIN wms_warehousing_entry_details d
+               ON d.id = q.entry_details_id AND d.is_del = 1
+        LEFT JOIN wms_warehouse w ON w.id = e.warehouse_id
+        LEFT JOIN wms_item_sku s ON s.id = q.sku_id
+        LEFT JOIN wms_item_spu p ON p.id = s.spu_id
+        WHERE q.is_del = 1
+        <if test="q.qcCode != null and q.qcCode != ''">
+            AND q.qc_code LIKE CONCAT('%', #{q.qcCode}, '%')
+        </if>
+        <if test="q.entryCode != null and q.entryCode != ''">
+            AND e.entry_code LIKE CONCAT('%', #{q.entryCode}, '%')
+        </if>
+        <if test="q.warehouseId != null">
+            AND e.warehouse_id = #{q.warehouseId}
+        </if>
+        <if test="q.skuId != null">
+            AND q.sku_id = #{q.skuId}
+        </if>
+        <if test="q.batchNumber != null and q.batchNumber != ''">
+            AND q.batch_number LIKE CONCAT('%', #{q.batchNumber}, '%')
+        </if>
+        <if test="q.mesWorkOrderNo != null and q.mesWorkOrderNo != ''">
+            AND q.mes_work_order_no LIKE CONCAT('%', #{q.mesWorkOrderNo}, '%')
+        </if>
+        <if test="q.status != null">
+            AND q.status = #{q.status}
+        </if>
+        <if test="q.onlyPending != null and q.onlyPending">
+            AND q.status IN (1, 2)
+        </if>
+        ORDER BY q.create_time DESC, q.id DESC
+    </select>
+</mapper>

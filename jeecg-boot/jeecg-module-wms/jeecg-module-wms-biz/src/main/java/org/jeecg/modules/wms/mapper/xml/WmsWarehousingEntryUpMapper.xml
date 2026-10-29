@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsWarehousingEntryUpMapper">
+
+    <select id="selectPutawayPage" resultType="org.jeecg.modules.wms.vo.WmsPutawayPage">
+        SELECT
+            u.id, u.entry_details_id, u.warehousing_entry_id, u.sku_id, u.batch_number,
+            u.warehouse_id, u.warehouse_area_id, u.warehouse_area_loca_id, u.count,
+            u.quality_status, u.strategy_used, u.recommend_loca_id, u.is_deviate,
+            u.deviate_reason, u.is_overflow, u.details_sort_id, u.status,
+            u.create_time, u.create_by, u.update_time, u.update_by,
+            e.entry_code,
+            w.name AS warehouse_name,
+            a.name AS area_name,
+            l.loca_code,
+            rl.loca_code AS recommend_loca_code,
+            s.code AS sku_code,
+            p.title AS spu_title,
+            d.received_count
+        FROM wms_warehousing_entry_up u
+        LEFT JOIN wms_warehousing_entry e ON e.id = u.warehousing_entry_id
+        LEFT JOIN wms_warehousing_entry_details d
+               ON d.id = u.entry_details_id AND d.is_del = 1
+        LEFT JOIN wms_warehouse w ON w.id = u.warehouse_id
+        LEFT JOIN wms_warehouse_area a ON a.id = u.warehouse_area_id
+        LEFT JOIN wms_warehouse_area_loca l ON l.id = u.warehouse_area_loca_id
+        LEFT JOIN wms_warehouse_area_loca rl ON rl.id = u.recommend_loca_id
+        LEFT JOIN wms_item_sku s ON s.id = u.sku_id
+        LEFT JOIN wms_item_spu p ON p.id = s.spu_id
+        WHERE u.is_del = 1
+        <if test="q.entryCode != null and q.entryCode != ''">
+            AND e.entry_code LIKE CONCAT('%', #{q.entryCode}, '%')
+        </if>
+        <if test="q.warehouseId != null">
+            AND u.warehouse_id = #{q.warehouseId}
+        </if>
+        <if test="q.warehouseAreaId != null">
+            AND u.warehouse_area_id = #{q.warehouseAreaId}
+        </if>
+        <if test="q.warehouseAreaLocaId != null">
+            AND u.warehouse_area_loca_id = #{q.warehouseAreaLocaId}
+        </if>
+        <if test="q.skuId != null">
+            AND u.sku_id = #{q.skuId}
+        </if>
+        <if test="q.batchNumber != null and q.batchNumber != ''">
+            AND u.batch_number LIKE CONCAT('%', #{q.batchNumber}, '%')
+        </if>
+        <if test="q.status != null">
+            AND u.status = #{q.status}
+        </if>
+        <if test="q.strategyUsed != null and q.strategyUsed != ''">
+            AND u.strategy_used = #{q.strategyUsed}
+        </if>
+        <if test="q.onlyDeviate != null and q.onlyDeviate">
+            AND u.is_deviate = 1
+        </if>
+        ORDER BY u.create_time DESC, u.id DESC
+    </select>
+</mapper>

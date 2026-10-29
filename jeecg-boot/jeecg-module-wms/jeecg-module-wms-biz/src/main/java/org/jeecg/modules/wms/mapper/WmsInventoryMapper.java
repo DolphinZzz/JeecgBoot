@@ -42,4 +42,12 @@ public interface WmsInventoryMapper extends BaseMapper<WmsInventory> {
                      @Param("lockedCount") int lockedCount,
                      @Param("frozenCount") int frozenCount,
                      @Param("isDel") int isDel);
+
+    /**
+     * 回写库存行的占用体积与占用重量。入库上架时调用，
+     * 供库位剩余容积 / 承重的后续校验使用。
+     */
+    int updateUsage(@Param("id") Long id,
+                    @Param("usedVolume") int usedVolume,
+                    @Param("usedWeight") int usedWeight);
 }

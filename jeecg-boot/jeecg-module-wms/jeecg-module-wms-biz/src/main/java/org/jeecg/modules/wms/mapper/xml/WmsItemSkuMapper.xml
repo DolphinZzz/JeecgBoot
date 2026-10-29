@@ -9,4 +9,19 @@
           AND is_del = 1
         ORDER BY id
     </select>
+
+    <!--
+      取当前生效的 ABC 等级。只有 is_current = 1 的一行是生效结果，
+      按 batch_id 倒序兜底，防止历史数据里同一 SKU 出现多行 is_current = 1。
+    -->
+    <select id="selectCurrentAbcClass" resultType="java.lang.String">
+        SELECT r.final_class
+        FROM wms_abc_class_result r
+        WHERE r.warehouse_id = #{warehouseId}
+          AND r.sku_id = #{skuId}
+          AND r.is_current = 1
+          AND r.final_class IS NOT NULL
+        ORDER BY r.batch_id DESC, r.id DESC
+        LIMIT 1
+    </select>
 </mapper>

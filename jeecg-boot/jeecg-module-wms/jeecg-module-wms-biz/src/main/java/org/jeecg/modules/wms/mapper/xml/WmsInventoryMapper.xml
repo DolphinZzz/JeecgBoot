@@ -127,6 +127,18 @@
         WHERE id = #{id}
     </update>
 
+    <!--
+      占用体积 / 重量回写。只改这两列，不动四个数量，
+      所以不需要走 applyChange 的恒等式校验。
+    -->
+    <update id="updateUsage">
+        UPDATE wms_inventory
+        SET used_volume = #{usedVolume},
+            used_weight = #{usedWeight},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
     <select id="sumTotalCount" resultType="java.lang.Long">
         SELECT IFNULL(SUM(i.total_count), 0)
         FROM wms_inventory i
