@@ -2,8 +2,10 @@ package org.jeecg.modules.wms.vo;
 
 import java.util.Date;
 import java.util.List;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
+import org.springframework.format.annotation.DateTimeFormat;
 
 /**
  * @Description: 新建入库单入参（ASN）
@@ -40,6 +42,8 @@ public class WmsEntryCreateForm {
     private String mesWorkOrderNo;
 
     /**预测到达时间，留空取当前时间*/
+    @JsonFormat(timezone = "GMT+8", pattern = "yyyy-MM-dd HH:mm:ss")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Schema(description = "预测到达时间")
     private Date predictedArrivalTime;
 
