@@ -30,11 +30,12 @@ export const columns: BasicColumn[] = [
     dataIndex: 'entryCode',
   },
   {
-    title: 'SKU编码',
-    align: 'center',
-    width: 130,
+    title: '商品SKU（编码 + 名称）',
+    align: 'left',
+    width: 250,
+    ellipsis: true,
     dataIndex: 'skuCode',
-    customRender: ({ text, record }) => text || record.skuId_dictText || '-',
+    customRender: ({ text, record }) => `${text || record.skuId_dictText || '-'} ${record.spuTitle || ''}`.trim(),
   },
   {
     title: '商品名称',
@@ -198,10 +199,10 @@ export const searchFormSchema: FormSchema[] = [
  */
 export const confirmColumns: JVxeColumn[] = [
   {
-    title: '商品SKU',
+    title: '商品SKU（编码 + 名称）',
     key: 'skuText',
     type: JVxeTypes.normal,
-    width: 150,
+    width: 220,
     disabled: true,
   },
   {
@@ -221,12 +222,11 @@ export const confirmColumns: JVxeColumn[] = [
   {
     title: '上架库位',
     key: 'locaId',
-    // 下拉选项由弹窗按本仓库位动态注入（按库区分组），不用表字典：
-    // 表字典会把所有仓库的库位混在一起，也看不出属于哪个库区
-    type: JVxeTypes.select,
-    width: 220,
-    allowSearch: true,
-    placeholder: '选择本仓库位',
+    // 库位动辄上百个，下拉里只能看到一串编码，作业员找不到具体格子。
+    // 改成插槽列：单元格里显示已选库位的完整坐标，点击打开「库位选择器」弹窗。
+    type: JVxeTypes.slot,
+    slotName: 'locaSlot',
+    width: 280,
     validateRules: [{ required: true, message: '请选择上架库位' }],
   },
   {

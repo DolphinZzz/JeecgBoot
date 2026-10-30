@@ -31,7 +31,7 @@
         <a-form-item label="指定SKU">
           <j-search-select
             v-model:value="generateSkuIds"
-            dict="wms_item_sku,code,id"
+            dict="wms_item_sku_v,text,id"
             :multiple="true"
             placeholder="留空则扫描全部低于补货下限的SKU"
             style="width: 100%"

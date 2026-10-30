@@ -13,12 +13,14 @@
             a.name AS area_name,
             l.loca_code,
             s.code AS sku_code,
+            p.title AS spu_title,
             c.consignor_name AS consignor_name
         FROM wms_inventory_log g
         LEFT JOIN wms_warehouse w ON w.id = g.warehouse_id
         LEFT JOIN wms_warehouse_area a ON a.id = g.warehouse_area_id
         LEFT JOIN wms_warehouse_area_loca l ON l.id = g.warehouse_area_loca_id
         LEFT JOIN wms_item_sku s ON s.id = g.sku_id
+        LEFT JOIN wms_item_spu p ON p.id = s.spu_id
         LEFT JOIN wms_consignor c ON c.id = g.consignor_id
         WHERE 1 = 1
         <if test="q.inventoryId != null">

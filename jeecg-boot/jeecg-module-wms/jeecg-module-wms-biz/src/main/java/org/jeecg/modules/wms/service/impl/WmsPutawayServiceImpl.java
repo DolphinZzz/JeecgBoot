@@ -7,6 +7,7 @@ import org.jeecg.common.util.oConvertUtils;
 import org.jeecg.modules.wms.entity.WmsInventory;
 import org.jeecg.modules.wms.entity.WmsItemSku;
 import org.jeecg.modules.wms.entity.WmsItemSpu;
+import org.jeecg.modules.wms.entity.WmsWarehouse;
 import org.jeecg.modules.wms.entity.WmsWarehouseArea;
 import org.jeecg.modules.wms.entity.WmsWarehouseAreaLoca;
 import org.jeecg.modules.wms.enums.WmsPutawayStrategyEnum;
@@ -16,6 +17,7 @@ import org.jeecg.modules.wms.mapper.WmsItemSkuMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSpuMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaLocaMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaMapper;
+import org.jeecg.modules.wms.mapper.WmsWarehouseMapper;
 import org.jeecg.modules.wms.service.IWmsPutawayService;
 import org.jeecg.modules.wms.service.IWmsStrategyConfigService;
 import org.jeecg.modules.wms.vo.WmsPutawayCandidate;
@@ -83,6 +85,9 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
 
     @Autowired
     private WmsInventoryMapper inventoryMapper;
+
+    @Autowired
+    private WmsWarehouseMapper warehouseMapper;
 
     @Autowired
     private IWmsStrategyConfigService strategyConfigService;
@@ -344,6 +349,7 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
                 .setLoca(loca)
                 .setZoneType(area == null ? null : area.getZoneType())
                 .setAreaCategory(area == null ? null : area.getCategory())
+                .setAreaName(area == null ? null : area.getName())
                 .setRemainVolume(remainVolume)
                 .setRemainWeight(remainWeight)
                 .setCapacity(Math.min(volumeCap, weightCap))
@@ -463,6 +469,7 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
                     .setLocaId(loca.getId())
                     .setLocaCode(loca.getLocaCode())
                     .setAreaId(loca.getWarehouseAreaId())
+                    .setAreaName(candidate.getAreaName())
                     .setCount(put)
                     .setCapacity(capacity)
                     .setOverflow(candidate.isOverflow())
@@ -745,6 +752,8 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
         WmsZoneTypeEnum itemZone = sku == null ? null : deriveItemZone(sku, spu, warehouseId);
         Map<Integer, List<WmsInventory>> occupiedMap = loadOccupiedByLocas(
                 locas.stream().map(WmsWarehouseAreaLoca::getId).collect(Collectors.toList()));
+        WmsWarehouse warehouse = warehouseMapper.selectById(warehouseId);
+        String warehouseName = warehouse == null ? null : warehouse.getName();
 
         List<WmsPutawayLocaOption> options = new ArrayList<>();
         for (WmsWarehouseAreaLoca loca : locas) {
@@ -759,24 +768,100 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
                     reason = e.getMessage();
                 }
             }
+            Integer remainVolume = loca.getLocalVolume() == null || loca.getLocalVolume() <= 0
+                    ? null : Math.max(0, loca.getLocalVolume() - countOf(loca.getUsedVolume()));
+            Integer remainWeight = loca.getLocalBearingCapacity() == null || loca.getLocalBearingCapacity() <= 0
+                    ? null : Math.max(0, loca.getLocalBearingCapacity() - countOf(loca.getUsedWeight()));
             options.add(new WmsPutawayLocaOption()
                     .setLocaId(loca.getId())
                     .setLocaCode(loca.getLocaCode())
                     .setGroup(area == null ? "未分配库区" : area.getName())
+                    .setWarehouseId(loca.getWarehouseId())
+                    .setWarehouseName(warehouseName)
                     .setAreaId(loca.getWarehouseAreaId())
+                    .setAreaName(area == null ? null : area.getName())
                     .setAreaCategory(area == null ? null : area.getCategory())
+                    .setAreaCategoryText(areaCategoryText(area == null ? null : area.getCategory()))
                     .setZoneType(area == null ? null : area.getZoneType())
+                    .setZoneTypeText(WmsZoneTypeEnum.of(area == null ? null : area.getZoneType()).getDesc())
                     .setStorageCondition(resolveLocaStorageCondition(loca, area))
                     .setLocaStatus(loca.getLocaStatus())
-                    .setRemainVolume(loca.getLocalVolume() == null || loca.getLocalVolume() <= 0
-                            ? null : Math.max(0, loca.getLocalVolume() - countOf(loca.getUsedVolume())))
-                    .setRemainWeight(loca.getLocalBearingCapacity() == null || loca.getLocalBearingCapacity() <= 0
-                            ? null : Math.max(0, loca.getLocalBearingCapacity() - countOf(loca.getUsedWeight())))
+                    .setLocaStatusText(locaStatusText(loca.getLocaStatus()))
+                    .setLocaLen(loca.getLocaLen())
+                    .setLocaWidth(loca.getLocaWidth())
+                    .setLocaHeight(loca.getLocaHeight())
+                    .setLocalVolume(loca.getLocalVolume())
+                    .setLocalBearingCapacity(loca.getLocalBearingCapacity())
+                    .setTunnelNumber(loca.getTunnelNumber())
+                    .setShelfNumber(loca.getShelfNumber())
+                    .setLayerNumber(loca.getLayerNumber())
+                    .setPositionNumber(loca.getPositionNumber())
+                    .setRemainVolume(remainVolume)
+                    .setRemainWeight(remainWeight)
+                    .setRemainCount(remainCount(sku, remainVolume, remainWeight))
                     .setFixedSkuId(loca.getFixedSkuId())
                     .setAllowed(reason.isEmpty())
                     .setRejectReason(reason.isEmpty() ? null : reason));
         }
         return options;
+    }
+
+    /**
+     * 该库位按本商品还能放几件：min(⌊剩余容积/单件体积⌋, ⌊剩余承重/单件重量⌋)。
+     * 商品没维护体积重量（单件为 0）或库位没配容积承重时无法估算，返回 null。
+     */
+    private Integer remainCount(WmsItemSku sku, Integer remainVolume, Integer remainWeight) {
+        if (sku == null) {
+            return null;
+        }
+        int unitVolume = unitVolume(sku);
+        int unitWeight = unitWeight(sku);
+        int volumeCap = unitVolume > 0 && remainVolume != null ? remainVolume / unitVolume : UNLIMITED;
+        int weightCap = unitWeight > 0 && remainWeight != null ? remainWeight / unitWeight : UNLIMITED;
+        int cap = Math.min(volumeCap, weightCap);
+        return cap >= UNLIMITED ? null : Math.max(0, cap);
+    }
+
+    /** 库区类型字典 wms_warehouse_area_category 的中文，与前端下拉筛选保持一致 */
+    private String areaCategoryText(String category) {
+        if (category == null) {
+            return null;
+        }
+        switch (category) {
+            case "RECEIVING":
+                return "收货暂存";
+            case "QC":
+                return "待检";
+            case AREA_STORAGE:
+                return "存储";
+            case AREA_PICKING:
+                return "拣货";
+            case AREA_RETURN:
+                return "退货不良";
+            case "SHIPPING":
+                return "集货待发";
+            default:
+                return category;
+        }
+    }
+
+    /** 库位状态字典 wms_loca_status 的中文 */
+    private String locaStatusText(Integer locaStatus) {
+        if (locaStatus == null) {
+            return null;
+        }
+        switch (locaStatus) {
+            case 1:
+                return "空闲";
+            case 2:
+                return "占用";
+            case LOCA_STATUS_STOCKTAKING:
+                return "盘点锁定";
+            case LOCA_STATUS_DISABLED:
+                return "禁用";
+            default:
+                return String.valueOf(locaStatus);
+        }
     }
 
     // ------------------------------------------------------------------

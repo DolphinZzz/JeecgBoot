@@ -9,11 +9,13 @@
             n.create_time, n.create_by, n.update_time, n.update_by,
             w.name AS warehouse_name,
             l.loca_code,
-            s.code AS sku_code
+            s.code AS sku_code,
+            p.title AS spu_title
         FROM wms_item_sn n
         LEFT JOIN wms_warehouse w ON w.id = n.warehouse_id
         LEFT JOIN wms_warehouse_area_loca l ON l.id = n.warehouse_area_loca_id
         LEFT JOIN wms_item_sku s ON s.id = n.sku_id
+        LEFT JOIN wms_item_spu p ON p.id = s.spu_id
         WHERE n.is_del = 1
         <if test="q.snCode != null and q.snCode != ''">
             AND n.sn_code LIKE CONCAT('%', #{q.snCode}, '%')

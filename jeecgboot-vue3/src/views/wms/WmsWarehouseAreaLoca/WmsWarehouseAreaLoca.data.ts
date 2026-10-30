@@ -20,6 +20,28 @@ export const columns: BasicColumn[] = [
     dataIndex: 'locaCode',
   },
   {
+    title: '巷道/货架/层/位',
+    align: 'center',
+    width: 150,
+    dataIndex: 'tunnelNumber',
+    customRender: ({ record }) => {
+      const parts = [record.tunnelNumber, record.shelfNumber, record.layerNumber, record.positionNumber];
+      if (parts.every((p) => p === null || p === undefined || p === '')) return '-';
+      return parts.map((p) => (p === null || p === undefined || p === '' ? '—' : p)).join(' / ');
+    },
+  },
+  {
+    title: '长×宽×高(mm)',
+    align: 'center',
+    width: 160,
+    dataIndex: 'locaLen',
+    customRender: ({ record }) => {
+      const { locaLen, locaWidth, locaHeight } = record;
+      if (!locaLen && !locaWidth && !locaHeight) return '-';
+      return `${locaLen ?? '-'} × ${locaWidth ?? '-'} × ${locaHeight ?? '-'}`;
+    },
+  },
+  {
     title: 'ABC分类',
     align: 'center',
     dataIndex: 'abcClass',
@@ -243,6 +265,13 @@ export const formSchema: FormSchema[] = [
     colProps: { span: 8 },
   },
   {
+    label: '位号',
+    field: 'positionNumber',
+    component: 'Input',
+    componentProps: { placeholder: '如 02' },
+    colProps: { span: 8 },
+  },
+  {
     label: '长(mm)',
     field: 'locaLen',
     component: 'InputNumber',
@@ -352,7 +381,7 @@ export const formSchema: FormSchema[] = [
     component: 'JDictSelectTag',
     helpMessage: '绑定固定SKU后，仅可存放该SKU',
     componentProps: {
-      dictCode: 'wms_item_sku,code,id',
+      dictCode: 'wms_item_sku_v,text,id',
       stringToNumber: true,
       placeholder: '选择绑定的SKU(选填)',
     },

@@ -53,19 +53,12 @@ export const columns: BasicColumn[] = [
     customRender: ({ text }) => (text === 'INDUSTRIAL' ? '工业制造仓' : text ? '普通仓' : '-'),
   },
   {
-    title: 'SKU编码',
-    align: 'center',
-    width: 130,
-    dataIndex: 'skuCode',
-    customRender: ({ text, record }) => text || record.skuId_dictText || '-',
-  },
-  {
-    title: '商品名称',
+    title: '商品SKU（编码 + 名称）',
     align: 'left',
-    width: 180,
+    width: 250,
     ellipsis: true,
-    dataIndex: 'spuTitle',
-    customRender: ({ text }) => text || '-',
+    dataIndex: 'skuCode',
+    customRender: ({ text, record }) => `${text || record.skuId_dictText || '-'} ${record.spuTitle || ''}`.trim(),
   },
   {
     title: '批次号',

@@ -94,6 +94,11 @@ public class WmsWarehouseAreaLoca implements Serializable {
     @Schema(description = "层号")
     private String layerNumber;
 
+    /**位号：与巷道号/货架号/层号一起定位到具体格子*/
+    @Excel(name = "位号", width = 10)
+    @Schema(description = "位号")
+    private String positionNumber;
+
     /**ABC分类 A/B/C*/
     @Excel(name = "ABC分类", width = 10, dicCode = "wms_abc_class")
     @Dict(dicCode = "wms_abc_class")
@@ -155,8 +160,8 @@ public class WmsWarehouseAreaLoca implements Serializable {
     private BigDecimal locaScore;
 
     /**固定库位绑定的SKU，为空表示非固定库位*/
-    @Excel(name = "固定SKU", width = 15, dictTable = "wms_item_sku", dicText = "code", dicCode = "id")
-    @Dict(dictTable = "wms_item_sku", dicText = "code", dicCode = "id")
+    @Excel(name = "固定SKU", width = 15, dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
+    @Dict(dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     @Schema(description = "固定库位绑定的SKU ID")
     private Long fixedSkuId;

@@ -66,26 +66,37 @@ public class WmsPutawayController {
     }
 
     /**
-     * 人工指定库位的下拉选项（只列本仓，按库区分组，标注硬过滤结论）
+     * 可选库位清单（库位选择器的数据源）。
+     *
+     * 传 id（入库单）时仓库与货主从单据取，带上 SKU 还能算出每个库位对该商品的
+     * 硬过滤结论与剩余可放件数；只传 warehouseId 时退化成纯库位浏览，
+     * 供移库等其它需要挑库位的场景复用同一个组件。
      */
     @Operation(summary = "上架作业-可选库位")
     @RequiresPermissions("wms:wms_warehousing_entry_up:recommend")
     @GetMapping(value = "/locaOptions")
-    public Result<List<WmsPutawayLocaOption>> locaOptions(@RequestParam(name = "id", required = true) Long id,
+    public Result<List<WmsPutawayLocaOption>> locaOptions(@RequestParam(name = "id", required = false) Long id,
+                                                          @RequestParam(name = "warehouseId", required = false) Integer warehouseId,
                                                           @RequestParam(name = "skuId", required = false) Long skuId,
                                                           @RequestParam(name = "count", required = false, defaultValue = "1") Integer count,
                                                           @RequestParam(name = "batchNumber", required = false) String batchNumber) {
-        WmsWarehousingEntry entry = entryService.getById(id);
-        if (entry == null) {
-            return Result.error("入库单不存在");
-        }
-        return Result.OK(putawayService.listLocaOptions(new WmsPutawayRequest()
-                .setWarehouseId(entry.getWarehouseId())
+        WmsPutawayRequest request = new WmsPutawayRequest()
                 .setSkuId(skuId)
                 .setBatchNumber(batchNumber)
                 .setCount(count == null ? 1 : count)
-                .setQualityStatus(1)
-                .setConsignorId(entry.getConsignorId())));
+                .setQualityStatus(1);
+        if (id != null) {
+            WmsWarehousingEntry entry = entryService.getById(id);
+            if (entry == null) {
+                return Result.error("入库单不存在");
+            }
+            request.setWarehouseId(entry.getWarehouseId()).setConsignorId(entry.getConsignorId());
+        } else if (warehouseId != null) {
+            request.setWarehouseId(warehouseId);
+        } else {
+            return Result.error("请指定入库单或仓库");
+        }
+        return Result.OK(putawayService.listLocaOptions(request));
     }
 
     /**

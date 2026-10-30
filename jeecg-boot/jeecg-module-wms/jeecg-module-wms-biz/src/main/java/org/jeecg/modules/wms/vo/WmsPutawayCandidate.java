@@ -30,6 +30,9 @@ public class WmsPutawayCandidate {
     /**库区类型(category)：STORAGE / PICKING / RETURN 等*/
     private String areaCategory;
 
+    /**库区名称：推荐行要展示给作业员，省得他们再拿库区ID去查*/
+    private String areaName;
+
     /**剩余容积（未配置容积时为 Integer.MAX_VALUE，表示不限制）*/
     private int remainVolume;
 

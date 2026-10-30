@@ -6,11 +6,13 @@ import org.jeecg.modules.wms.entity.WmsItemSku;
 import org.jeecg.modules.wms.entity.WmsItemSpu;
 import org.jeecg.modules.wms.entity.WmsWarehouseArea;
 import org.jeecg.modules.wms.entity.WmsWarehouseAreaLoca;
+import org.jeecg.modules.wms.entity.WmsWarehouse;
 import org.jeecg.modules.wms.mapper.WmsInventoryMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSkuMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSpuMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaLocaMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaMapper;
+import org.jeecg.modules.wms.mapper.WmsWarehouseMapper;
 import org.jeecg.modules.wms.service.IWmsStrategyConfigService;
 import org.jeecg.modules.wms.vo.WmsPutawayLocaOption;
 import org.jeecg.modules.wms.vo.WmsPutawayPlan;
@@ -61,6 +63,9 @@ public class WmsPutawayServiceImplTest {
 
     @Mock
     private WmsInventoryMapper inventoryMapper;
+
+    @Mock
+    private WmsWarehouseMapper warehouseMapper;
 
     @Mock
     private IWmsStrategyConfigService strategyConfigService;
@@ -136,6 +141,22 @@ public class WmsPutawayServiceImplTest {
     }
 
     @Test
+    void recommendLineCarriesAreaNameForDisplay() {
+        WmsWarehouseArea storage = area(1, "STORAGE", "GENERAL", "NORMAL").setName("常温存储区A");
+        stubAreas(storage);
+        when(locaMapper.selectList(any())).thenReturn(Collections.singletonList(loca(1, "L-01", 1, 100000, 100000)));
+        when(inventoryMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(skuMapper.selectById(SKU_ID)).thenReturn(sku);
+        when(spuMapper.selectById(1L)).thenReturn(spu("NORMAL", 0));
+
+        WmsPutawayPlan plan = putawayService.recommend(request(10));
+
+        // 推荐行也要能直接显示库区名，页面不该再拿 areaId 去猜
+        assertEquals(1, plan.getLines().size());
+        assertEquals("常温存储区A", plan.getLines().get(0).getAreaName());
+    }
+
+    @Test
     void disabledLocaMustBeExcluded() {
         stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL"));
         WmsWarehouseAreaLoca disabled = loca(1, "L-01", 1, 100000, 100000).setLocaStatus(4);
@@ -151,8 +172,7 @@ public class WmsPutawayServiceImplTest {
     }
 
     @Test
-    void stocktakingLockedLocaMustBeExcluded() {
-        stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL"));
+    void stocktakingLockedLocaMustBeExcluded() {        stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL"));
         WmsWarehouseAreaLoca locked = loca(1, "L-01", 1, 100000, 100000).setLocaStatus(3);
         when(locaMapper.selectList(any())).thenReturn(Collections.singletonList(locked));
         when(inventoryMapper.selectList(any())).thenReturn(new ArrayList<>());
@@ -466,12 +486,15 @@ public class WmsPutawayServiceImplTest {
         WmsWarehouseArea storageArea = area(1, "STORAGE", "GENERAL", "NORMAL").setName("常温存储区A");
         WmsWarehouseArea smallArea = area(2, "PICKING", "SMALL", "NORMAL").setName("拣货区B");
         stubAreas(storageArea, smallArea);
-        WmsWarehouseAreaLoca storage = loca(1, "L-01", 1, 100000, 100000);
+        WmsWarehouseAreaLoca storage = loca(1, "L-01", 1, 100000, 100000)
+                .setLocaLen(1200).setLocaWidth(1000).setLocaHeight(400)
+                .setTunnelNumber("01").setShelfNumber("A").setLayerNumber("1").setPositionNumber("02");
         WmsWarehouseAreaLoca small = loca(2, "L-02", 2, 100000, 100000);
         when(locaMapper.selectList(any())).thenReturn(Arrays.asList(storage, small));
         when(inventoryMapper.selectList(any())).thenReturn(new ArrayList<>());
         when(skuMapper.selectById(SKU_ID)).thenReturn(sku);
         when(spuMapper.selectById(1L)).thenReturn(spu("COLD", 1));
+        when(warehouseMapper.selectById(WAREHOUSE_ID)).thenReturn(new WmsWarehouse().setId(WAREHOUSE_ID).setName("上海一号仓"));
 
         List<WmsPutawayLocaOption> options = putawayService.listLocaOptions(request(1));
 
@@ -483,6 +506,21 @@ public class WmsPutawayServiceImplTest {
         assertFalse(first.isAllowed(), "贵品冷库商品放在常温通用区应被标记为不可选");
         assertNotNull(first.getRejectReason(), "不可选的库位必须给出原因");
         assertEquals(Integer.valueOf(100000), first.getRemainVolume());
+        // 库位选择器要靠这些字段让作业员认出具体格子，少一个都得回列表页查
+        assertEquals("上海一号仓", first.getWarehouseName());
+        assertEquals("常温存储区A", first.getAreaName());
+        assertEquals("存储", first.getAreaCategoryText());
+        assertEquals("通用", first.getZoneTypeText());
+        assertEquals("空闲", first.getLocaStatusText());
+        assertEquals(Integer.valueOf(1200), first.getLocaLen());
+        assertEquals(Integer.valueOf(1000), first.getLocaWidth());
+        assertEquals(Integer.valueOf(400), first.getLocaHeight());
+        assertEquals("01", first.getTunnelNumber());
+        assertEquals("A", first.getShelfNumber());
+        assertEquals("1", first.getLayerNumber());
+        assertEquals("02", first.getPositionNumber());
+        // 剩余可放件数按单件体积 1000 cm³ 折算，承重 500g 不构成瓶颈
+        assertEquals(Integer.valueOf(100), first.getRemainCount());
     }
 
     @Test

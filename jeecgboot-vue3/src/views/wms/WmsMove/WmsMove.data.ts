@@ -119,7 +119,7 @@ export const detailColumns: JVxeColumn[] = [
     key: 'skuId',
     type: JVxeTypes.select,
     width: 200,
-    dictCode: 'wms_item_sku,code,id',
+    dictCode: 'wms_item_sku_v,text,id',
     allowSearch: true,
     placeholder: '请选择SKU',
     validateRules: [{ required: true, message: '请选择商品SKU' }],
@@ -185,7 +185,7 @@ export const detailColumns: JVxeColumn[] = [
 
 // 作业明细展示列（详情弹窗）
 export const detailViewColumns: BasicColumn[] = [
-  { title: '商品SKU', align: 'center', width: 140, dataIndex: 'skuId_dictText' },
+  { title: '商品SKU（编码 + 名称）', align: 'left', width: 250, ellipsis: true, dataIndex: 'skuId_dictText' },
   { title: '批次号', align: 'center', width: 130, dataIndex: 'batchNumber' },
   { title: '货主', align: 'center', width: 140, dataIndex: 'consignorId_dictText' },
   { title: '质量状态', align: 'center', width: 100, dataIndex: 'qualityStatus_dictText' },

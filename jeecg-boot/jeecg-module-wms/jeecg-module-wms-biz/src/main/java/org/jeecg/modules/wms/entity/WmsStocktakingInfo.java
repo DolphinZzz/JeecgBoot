@@ -57,8 +57,8 @@ public class WmsStocktakingInfo implements Serializable {
     private Integer targetWarehouseAreaLocaId;
 
     /**规格ID*/
-    @Excel(name = "商品SKU", width = 15, dictTable = "wms_item_sku", dicText = "code", dicCode = "id")
-    @Dict(dictTable = "wms_item_sku", dicText = "code", dicCode = "id")
+    @Excel(name = "商品SKU", width = 15, dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
+    @Dict(dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
     @Schema(description = "规格ID")
     private Long skuId;
 

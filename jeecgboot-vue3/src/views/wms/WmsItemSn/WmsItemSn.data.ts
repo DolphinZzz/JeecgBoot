@@ -11,11 +11,12 @@ export const columns: BasicColumn[] = [
     dataIndex: 'snCode',
   },
   {
-    title: 'SKU编码',
-    align: 'center',
-    width: 130,
+    title: '商品SKU（编码 + 名称）',
+    align: 'left',
+    width: 250,
+    ellipsis: true,
     dataIndex: 'skuCode',
-    customRender: ({ text, record }) => text || record.skuId_dictText || '-',
+    customRender: ({ text, record }) => `${text || record.skuId_dictText || '-'} ${record.spuTitle || ''}`.trim(),
   },
   {
     title: '批次号',
@@ -110,7 +111,7 @@ export const searchFormSchema: FormSchema[] = [
     field: 'skuId',
     component: 'JSearchSelect',
     componentProps: {
-      dict: 'wms_item_sku,code,id',
+      dict: 'wms_item_sku_v,text,id',
       placeholder: '请选择SKU',
     },
     colProps: { span: 6 },

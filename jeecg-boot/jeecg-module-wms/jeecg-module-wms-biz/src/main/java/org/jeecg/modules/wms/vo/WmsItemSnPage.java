@@ -22,4 +22,7 @@ public class WmsItemSnPage extends WmsItemSn {
 
     /**商品SKU编码*/
     private String skuCode;
+
+    /**商品名称（SPU 标题）*/
+    private String spuTitle;
 }

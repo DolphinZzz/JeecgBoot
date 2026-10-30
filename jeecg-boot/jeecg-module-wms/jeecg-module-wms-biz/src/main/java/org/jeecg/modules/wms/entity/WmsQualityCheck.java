@@ -56,8 +56,8 @@ public class WmsQualityCheck implements Serializable {
     private String mesWorkOrderNo;
 
     /**规格ID*/
-    @Excel(name = "商品SKU", width = 18, dictTable = "wms_item_sku", dicText = "code", dicCode = "id")
-    @Dict(dictTable = "wms_item_sku", dicText = "code", dicCode = "id")
+    @Excel(name = "商品SKU", width = 18, dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
+    @Dict(dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
     @Schema(description = "规格ID")
     private Long skuId;
 

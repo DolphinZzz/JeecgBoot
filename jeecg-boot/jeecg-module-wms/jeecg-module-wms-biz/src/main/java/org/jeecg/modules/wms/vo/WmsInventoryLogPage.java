@@ -26,6 +26,9 @@ public class WmsInventoryLogPage extends WmsInventoryLog {
     /**商品SKU编码*/
     private String skuCode;
 
+    /**商品名称（SPU 标题）*/
+    private String spuTitle;
+
     /**货主名称*/
     private String consignorName;
 }

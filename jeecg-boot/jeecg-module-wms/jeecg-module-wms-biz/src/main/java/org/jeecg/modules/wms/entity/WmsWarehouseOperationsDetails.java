@@ -35,7 +35,7 @@ public class WmsWarehouseOperationsDetails implements Serializable {
     private Long warehouseOperationsId;
 
     /**规格ID*/
-    @Dict(dictTable = "wms_item_sku", dicText = "code", dicCode = "id")
+    @Dict(dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
     @Schema(description = "规格ID")
     private Long skuId;
 
