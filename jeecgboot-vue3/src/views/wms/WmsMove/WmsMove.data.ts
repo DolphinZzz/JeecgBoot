@@ -136,7 +136,7 @@ export const detailColumns: JVxeColumn[] = [
     key: 'consignorId',
     type: JVxeTypes.select,
     width: 150,
-    dictCode: 'wms_customer,customer_name,id',
+    dictCode: 'wms_consignor,consignor_name,id,enable_status=1',
     allowSearch: true,
     placeholder: '自有货主可留空',
   },

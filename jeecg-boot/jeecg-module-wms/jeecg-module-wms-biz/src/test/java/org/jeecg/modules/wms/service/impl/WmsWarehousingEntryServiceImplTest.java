@@ -1,6 +1,7 @@
 package org.jeecg.modules.wms.service.impl;
 
 import org.jeecg.common.exception.JeecgBootException;
+import org.jeecg.modules.wms.entity.WmsConsignor;
 import org.jeecg.modules.wms.entity.WmsItemSku;
 import org.jeecg.modules.wms.entity.WmsQualityCheck;
 import org.jeecg.modules.wms.entity.WmsWarehouse;
@@ -14,6 +15,7 @@ import org.jeecg.modules.wms.mapper.WmsItemSkuMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSnMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSpuMapper;
 import org.jeecg.modules.wms.mapper.WmsQualityCheckMapper;
+import org.jeecg.modules.wms.mapper.WmsConsignorMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaLocaMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseMapper;
@@ -23,6 +25,7 @@ import org.jeecg.modules.wms.mapper.WmsWarehousingEntryMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehousingEntryUpMapper;
 import org.jeecg.modules.wms.service.IWmsInventoryService;
 import org.jeecg.modules.wms.service.IWmsPutawayService;
+import org.jeecg.modules.wms.vo.WmsEntryCreateForm;
 import org.jeecg.modules.wms.vo.WmsQcSubmitForm;
 import org.jeecg.modules.wms.vo.WmsReceiveForm;
 import org.junit.jupiter.api.BeforeEach;
@@ -87,6 +90,9 @@ public class WmsWarehousingEntryServiceImplTest {
     private WmsWarehouseMapper warehouseMapper;
 
     @Mock
+    private WmsConsignorMapper consignorMapper;
+
+    @Mock
     private WmsWarehouseAreaMapper areaMapper;
 
     @Mock
@@ -142,6 +148,43 @@ public class WmsWarehousingEntryServiceImplTest {
         line.setSnCodes(Collections.emptyList());
         WmsReceiveForm form = new WmsReceiveForm();
         form.setId(ENTRY_ID);
+        form.setDetails(Collections.singletonList(line));
+        return form;
+    }
+
+    // ---------------- 建单 ----------------
+
+    /**
+     * 货主必须是货主档案里已启用的一条。这里守住两道：档案不存在、档案已停用。
+     * 停用只拦新单，历史单据的货主展示不受影响。
+     */
+    @Test
+    void createRejectsUnknownConsignor() {
+        when(warehouseMapper.selectById(1)).thenReturn(warehouse("NORMAL"));
+        JeecgBootException ex = assertThrows(JeecgBootException.class,
+                () -> entryService.createEntry(createForm()));
+        assertTrue(ex.getMessage().contains("货主不存在"), ex.getMessage());
+    }
+
+    @Test
+    void createRejectsDisabledConsignor() {
+        when(warehouseMapper.selectById(1)).thenReturn(warehouse("NORMAL"));
+        when(consignorMapper.selectById(1L)).thenReturn(new WmsConsignor()
+                .setId(1).setConsignorName("停用货主").setEnableStatus(0));
+        JeecgBootException ex = assertThrows(JeecgBootException.class,
+                () -> entryService.createEntry(createForm()));
+        assertTrue(ex.getMessage().contains("已停用"), ex.getMessage());
+        verify(entryMapper, never()).insert(any(WmsWarehousingEntry.class));
+    }
+
+    private WmsEntryCreateForm createForm() {
+        org.jeecg.modules.wms.vo.WmsEntryDetailForm line = new org.jeecg.modules.wms.vo.WmsEntryDetailForm();
+        line.setSkuId(100L);
+        line.setCount(10);
+        WmsEntryCreateForm form = new WmsEntryCreateForm();
+        form.setEntryType(1);
+        form.setWarehouseId(1);
+        form.setConsignorId(1L);
         form.setDetails(Collections.singletonList(line));
         return form;
     }

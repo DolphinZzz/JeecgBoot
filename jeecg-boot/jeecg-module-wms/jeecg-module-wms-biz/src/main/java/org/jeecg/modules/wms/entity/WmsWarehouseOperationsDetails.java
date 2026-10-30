@@ -44,7 +44,7 @@ public class WmsWarehouseOperationsDetails implements Serializable {
     private String batchNumber;
 
     /**货主ID*/
-    @Dict(dictTable = "wms_customer", dicText = "customer_name", dicCode = "id")
+    @Dict(dictTable = "wms_consignor", dicText = "consignor_name", dicCode = "id")
     @Schema(description = "货主ID")
     private Long consignorId;
 

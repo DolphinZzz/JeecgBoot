@@ -202,7 +202,7 @@ export const createSchema: FormSchema[] = [
     component: 'JDictSelectTag',
     required: true,
     componentProps: {
-      dictCode: 'wms_customer,customer_name,id',
+      dictCode: 'wms_consignor,consignor_name,id,enable_status=1',
       stringToNumber: true,
       placeholder: '请选择货主',
     },

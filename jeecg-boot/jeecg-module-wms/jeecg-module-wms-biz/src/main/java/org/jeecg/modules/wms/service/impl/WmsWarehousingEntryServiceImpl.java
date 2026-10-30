@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.jeecg.common.exception.JeecgBootException;
 import org.jeecg.common.util.oConvertUtils;
+import org.jeecg.modules.wms.entity.WmsConsignor;
 import org.jeecg.modules.wms.entity.WmsInventory;
 import org.jeecg.modules.wms.entity.WmsItemSku;
 import org.jeecg.modules.wms.entity.WmsItemSn;
@@ -32,6 +33,7 @@ import org.jeecg.modules.wms.mapper.WmsItemSpuMapper;
 import org.jeecg.modules.wms.mapper.WmsQualityCheckMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaLocaMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaMapper;
+import org.jeecg.modules.wms.mapper.WmsConsignorMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehousingEntryDetailsMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehousingEntryDetailsSortMapper;
@@ -141,6 +143,9 @@ public class WmsWarehousingEntryServiceImpl
     private WmsWarehouseMapper warehouseMapper;
 
     @Autowired
+    private WmsConsignorMapper consignorMapper;
+
+    @Autowired
     private WmsWarehouseAreaMapper areaMapper;
 
     @Autowired
@@ -177,6 +182,14 @@ public class WmsWarehousingEntryServiceImpl
         WmsWarehouse warehouse = warehouseMapper.selectById(form.getWarehouseId());
         if (warehouse == null) {
             throw new JeecgBootException("入库仓库不存在");
+        }
+        // 货主必须来自货主档案且处于启用状态；停用的货主只是不再接新单，历史单据照常可查
+        WmsConsignor consignor = consignorMapper.selectById(form.getConsignorId());
+        if (consignor == null) {
+            throw new JeecgBootException("货主不存在，请先在「基础数据-货主信息」中维护");
+        }
+        if (consignor.getEnableStatus() != null && consignor.getEnableStatus() != 1) {
+            throw new JeecgBootException("货主「" + consignor.getConsignorName() + "」已停用，不能建新入库单");
         }
         int entryType = form.getEntryType() == null ? 1 : form.getEntryType();
         // IN-02 的第一道闸：工业仓的生产入库建单时就要求带工单号，别等到质检才拦

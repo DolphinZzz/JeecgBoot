@@ -15,7 +15,7 @@
             e.create_time, e.create_by, e.update_time, e.update_by,
             w.name AS warehouse_name,
             w.warehouse_type AS warehouse_type,
-            c.customer_name AS consignor_name,
+            c.consignor_name AS consignor_name,
             (SELECT COUNT(*) FROM wms_warehousing_entry_details d
               WHERE d.warehousing_entry_id = e.id AND d.is_del = 1) AS detail_rows,
             (SELECT IFNULL(SUM(d.count), 0) FROM wms_warehousing_entry_details d
@@ -26,7 +26,7 @@
               WHERE u.warehousing_entry_id = e.id AND u.status = 2 AND u.is_del = 1) AS putaway_total
         FROM wms_warehousing_entry e
         LEFT JOIN wms_warehouse w ON w.id = e.warehouse_id
-        LEFT JOIN wms_customer c ON c.id = e.consignor_id
+        LEFT JOIN wms_consignor c ON c.id = e.consignor_id
         WHERE e.is_del = 1
         <if test="q.entryCode != null and q.entryCode != ''">
             AND e.entry_code LIKE CONCAT('%', #{q.entryCode}, '%')

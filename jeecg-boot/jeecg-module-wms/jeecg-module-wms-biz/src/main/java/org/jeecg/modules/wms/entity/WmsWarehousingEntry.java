@@ -58,8 +58,8 @@ public class WmsWarehousingEntry implements Serializable {
     private String mesWorkOrderNo;
 
     /**货主ID*/
-    @Excel(name = "货主", width = 18, dictTable = "wms_customer", dicText = "customer_name", dicCode = "id")
-    @Dict(dictTable = "wms_customer", dicText = "customer_name", dicCode = "id")
+    @Excel(name = "货主", width = 18, dictTable = "wms_consignor", dicText = "consignor_name", dicCode = "id")
+    @Dict(dictTable = "wms_consignor", dicText = "consignor_name", dicCode = "id")
     @Schema(description = "货主ID")
     private Long consignorId;
 

@@ -46,7 +46,7 @@ public class WmsInventory implements Serializable {
     @Schema(description = "库位ID")
     private Integer warehouseAreaLocaId;
 
-    /**货主ID（对应 wms_customer.id）*/
+    /**货主ID（对应 wms_consignor.id）*/
     @Schema(description = "货主ID")
     private Long consignorId;
 

@@ -28,7 +28,7 @@
             l.storage_condition,
             s.code AS sku_code,
             p.title AS spu_title,
-            c.customer_name AS consignor_name,
+            c.consignor_name AS consignor_name,
             <include refid="expireStatusExpr"/> AS expire_status
         FROM wms_inventory i
         LEFT JOIN wms_warehouse w ON w.id = i.warehouse_id
@@ -36,7 +36,7 @@
         LEFT JOIN wms_warehouse_area_loca l ON l.id = i.warehouse_area_loca_id
         LEFT JOIN wms_item_sku s ON s.id = i.sku_id
         LEFT JOIN wms_item_spu p ON p.id = s.spu_id
-        LEFT JOIN wms_customer c ON c.id = i.consignor_id
+        LEFT JOIN wms_consignor c ON c.id = i.consignor_id
         WHERE i.is_del = 1
         <if test="q.warehouseId != null">
             AND i.warehouse_id = #{q.warehouseId}

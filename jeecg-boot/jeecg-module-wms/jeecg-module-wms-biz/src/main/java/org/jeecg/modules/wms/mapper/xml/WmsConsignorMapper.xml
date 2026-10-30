@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsConsignorMapper">
+
+    <!--
+      取最大货主编码给服务端发号用。
+      已删除（is_del = 2）的记录也参与比较：编码是业务上对外可见的标识，
+      删掉后复用同一个编号会让历史单据的货主编码产生歧义。
+    -->
+    <select id="selectMaxConsignorCode" resultType="java.lang.String">
+        SELECT MAX(c.consignor_code)
+        FROM wms_consignor c
+        WHERE c.consignor_code LIKE CONCAT(#{prefix}, '%')
+    </select>
+
+    <!--
+      删除前的引用检查。货主是库存维度的一部分（库位 + SKU + 批次 + 货主），
+      任何一张业务表还引用它就不能删，否则库存归属、流水追溯都会断。
+      库存流水按「发生过就算」统计，不看 is_del。
+    -->
+    <select id="countReferences" resultType="long">
+        SELECT
+            (SELECT COUNT(*) FROM wms_warehousing_entry e
+              WHERE e.consignor_id = #{consignorId} AND e.is_del = 1)
+          + (SELECT COUNT(*) FROM wms_inventory i
+              WHERE i.consignor_id = #{consignorId} AND i.is_del = 1)
+          + (SELECT COUNT(*) FROM wms_inventory_log g
+              WHERE g.consignor_id = #{consignorId})
+          + (SELECT COUNT(*) FROM wms_warehouse_operations_details d
+              WHERE d.consignor_id = #{consignorId})
+          + (SELECT COUNT(*) FROM wms_stocktaking_info s
+              WHERE s.consignor_id = #{consignorId} AND s.is_del = 1)
+    </select>
+
+    <!--
+      编码查重。这里的 selectCount 不能用 MyBatis-Plus 的包装器：
+      带 @TableLogic 的包装器查询会自动追加 is_del = 1，而唯一索引是不分删除状态的，
+      口径不一致会在「删掉一条再新增同编码」时先通过校验、再撞唯一索引报错。
+    -->
+    <select id="countByCode" resultType="long">
+        SELECT COUNT(*)
+        FROM wms_consignor c
+        WHERE c.consignor_code = #{consignorCode}
+        <if test="excludeId != null">
+            AND c.id != #{excludeId}
+        </if>
+    </select>
+</mapper>

@@ -28,7 +28,8 @@
 | 业务域 | 表名 | 说明 | 数据量（当前） |
 | :--- | :--- | :--- | :--- |
 | 基础主数据 | `wms_supplier` | 供应商 | 9 |
-| | `wms_customer` | 客户 / 货主 | 36 |
+| | `wms_customer` | 客户（销售侧往来单位） | 36 |
+| | `wms_consignor` | 货主（库存归属主体，`consignor_id` 指向它） | 36 |
 | | `wms_brand` | 品牌 | 14 |
 | | `wms_item_category` | 商品分类（三级树） | 7 |
 | | `wms_item_spu` | 商品 SPU | 7 |
@@ -63,7 +64,8 @@
 | 品牌 | ✅ | ✅ `views/wms/WmsBrand` | ✅ `/wms/base/wmsBrandList` |
 | 商品分类 | ✅ | ✅ `views/wms/WmsItemCategory` | ✅ `/wms/base/wmsItemCategoryList` |
 | 商品 SPU / SKU | ✅（含条码、二维码） | ✅ `views/wms/WmsItemSpu` | ✅ `/wms/base/wmsItemSpuList` |
-| 客户 | ❌（仅表） | ❌（菜单已建） | ✅ `/wms/base/wmsCustomerList` |
+| 客户 | ✅ | ✅ `views/wms/WmsCustomer` | ✅ `/wms/base/wmsCustomerList` |
+| 货主 | ✅ | ✅ `views/wms/WmsConsignor` | ✅ `/wms/base/wmsConsignorList` |
 | 仓库 / 库区 / 库位 | ❌ | ❌ | ❌ |
 | 入库 / 出库 / 库内 / 盘点 | ❌ | ❌ | ❌ |
 
