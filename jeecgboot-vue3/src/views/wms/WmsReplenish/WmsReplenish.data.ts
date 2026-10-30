@@ -90,7 +90,7 @@ export const searchFormSchema: FormSchema[] = [
 
 // 作业明细展示列
 export const detailViewColumns: BasicColumn[] = [
-  { title: '商品SKU', align: 'center', width: 140, dataIndex: 'skuId_dictText' },
+  { title: '商品信息', align: 'center', width: 140, dataIndex: 'skuId_dictText' },
   { title: '批次号', align: 'center', width: 130, dataIndex: 'batchNumber' },
   { title: '货主', align: 'center', width: 140, dataIndex: 'consignorId_dictText' },
   { title: '质量状态', align: 'center', width: 100, dataIndex: 'qualityStatus_dictText' },

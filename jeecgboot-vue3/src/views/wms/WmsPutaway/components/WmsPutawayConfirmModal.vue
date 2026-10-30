@@ -40,17 +40,15 @@
         :toolbar="false"
       >
         <template #locaSlot="{ row, triggerChange }">
-          <div class="loca-cell">
+          <!-- 行高被 vxe 固定为单行（showOverflow），单元格内容必须压成一行，否则第三行会被裁掉 -->
+          <div class="loca-cell" :title="picked[row.id] ? coordText(picked[row.id]) : '点击选择上架库位'" @click="openPicker(row, triggerChange)">
             <template v-if="picked[row.id]">
-              <div class="loca-cell__code">
-                <a-tag :color="picked[row.id].allowed ? 'green' : 'orange'">{{ picked[row.id].locaCode }}</a-tag>
-                <a v-if="picked[row.id].allowed === false" class="loca-cell__warn" title="未通过硬过滤，提交时需勾选强制上架">⚠</a>
-              </div>
-              <div class="loca-cell__meta">{{ coordText(picked[row.id]) }}</div>
+              <a-tag class="loca-cell__tag" :color="picked[row.id].allowed ? 'green' : 'orange'">{{ picked[row.id].locaCode }}</a-tag>
+              <span v-if="picked[row.id].allowed === false" class="loca-cell__warn" :title="picked[row.id].rejectReason || '未通过硬过滤'">⚠</span>
+              <span class="loca-cell__meta">{{ coordText(picked[row.id]) }}</span>
+              <span class="loca-cell__action">更换</span>
             </template>
-            <a-button size="small" @click="openPicker(row, triggerChange)">
-              {{ picked[row.id] ? '更换' : '选择库位' }}
-            </a-button>
+            <span v-else class="loca-cell__action">选择库位</span>
           </div>
         </template>
       </JVxeTable>
@@ -101,7 +99,6 @@
     openPickerModal(true, {
       entryId: entry.value.id,
       skuId: row.skuId,
-      skuText: row.skuText,
       locaId: row.locaId,
       count: row.count,
       batchNumber: entry.value.batchNumber,
@@ -241,23 +238,41 @@
 
 <style lang="less" scoped>
   .loca-cell {
-    line-height: 1.3;
-    padding: 2px 0;
-  }
-
-  .loca-cell__code {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
+    min-width: 0;
+    height: 100%;
+    cursor: pointer;
+  }
+
+  .loca-cell__tag {
+    flex: none;
+    margin-inline-end: 0;
   }
 
   .loca-cell__warn {
+    flex: none;
     color: #d48806;
   }
 
+  /* 坐标是次要信息：占满剩余宽度，超长省略，不能把「更换」挤出单元格 */
   .loca-cell__meta {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
     color: #8c8c8c;
     font-size: 12px;
-    margin-bottom: 2px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .loca-cell__action {
+    flex: none;
+    color: @primary-color;
+  }
+
+  .loca-cell:hover .loca-cell__action {
+    text-decoration: underline;
   }
 </style>

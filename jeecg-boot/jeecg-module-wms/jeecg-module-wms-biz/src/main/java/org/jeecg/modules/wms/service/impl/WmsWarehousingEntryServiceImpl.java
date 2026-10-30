@@ -42,6 +42,9 @@ import org.jeecg.modules.wms.mapper.WmsWarehousingEntryUpMapper;
 import org.jeecg.modules.wms.service.IWmsInventoryService;
 import org.jeecg.modules.wms.service.IWmsPutawayService;
 import org.jeecg.modules.wms.service.IWmsWarehousingEntryService;
+import org.jeecg.modules.wms.dto.ErpWarehousingEntryCreateDto;
+import org.jeecg.modules.wms.dto.ErpWarehousingEntryDetailDto;
+import org.jeecg.modules.wms.util.WmsUnitConverter;
 import org.jeecg.modules.wms.vo.WmsEntryCreateForm;
 import org.jeecg.modules.wms.vo.WmsEntryDetailForm;
 import org.jeecg.modules.wms.vo.WmsEntryDetailView;
@@ -54,6 +57,7 @@ import org.jeecg.modules.wms.vo.WmsPutawayPlanLine;
 import org.jeecg.modules.wms.vo.WmsPutawayRequest;
 import org.jeecg.modules.wms.vo.WmsQcSubmitForm;
 import org.jeecg.modules.wms.vo.WmsReceiveForm;
+import org.jeecg.modules.wms.vo.WmsWarehousingEntryResultVo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -192,13 +196,8 @@ public class WmsWarehousingEntryServiceImpl
             throw new JeecgBootException("货主「" + consignor.getConsignorName() + "」已停用，不能建新入库单");
         }
         int entryType = form.getEntryType() == null ? 1 : form.getEntryType();
-        // IN-02 的第一道闸：工业仓的生产入库建单时就要求带工单号，别等到质检才拦
-        if (WmsWarehouseTypeEnum.of(warehouse.getWarehouseType()).requireMesWorkOrder()
-                && entryType == 2 && oConvertUtils.isEmpty(form.getMesWorkOrderNo())) {
-            throw new JeecgBootException("工业制造仓的生产入库必须填写 MES 生产工单号");
-        }
-
         Date now = new Date();
+        // 批次号自动生成：若用户未传则后端统一生成整单唯一批次
         String batchNumber = oConvertUtils.isEmpty(form.getBatchNumber())
                 ? nextBatchNumber() : form.getBatchNumber().trim();
         Date predictedArrival = form.getPredictedArrivalTime() == null ? now : form.getPredictedArrivalTime();
@@ -207,14 +206,14 @@ public class WmsWarehousingEntryServiceImpl
         List<WmsWarehousingEntryDetails> detailEntities = new ArrayList<>();
         for (WmsEntryDetailForm line : form.getDetails()) {
             if (line == null || line.getSkuId() == null) {
-                throw new JeecgBootException("明细行的商品SKU不能为空");
+                throw new JeecgBootException("明细行的商品信息不能为空");
             }
             if (line.getCount() == null || line.getCount() <= 0) {
                 throw new JeecgBootException("明细行的计划数量必须大于0");
             }
             WmsItemSku sku = skuMapper.selectById(line.getSkuId());
             if (sku == null) {
-                throw new JeecgBootException("明细行引用的商品SKU不存在：" + line.getSkuId());
+                throw new JeecgBootException("明细行引用的商品信息不存在：" + line.getSkuId());
             }
             totalCount += line.getCount();
             detailEntities.add(new WmsWarehousingEntryDetails()
@@ -264,6 +263,135 @@ public class WmsWarehousingEntryServiceImpl
             detailsMapper.insert(detail);
         }
         return entry;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public WmsWarehousingEntryResultVo createEntryFromErp(ErpWarehousingEntryCreateDto dto) {
+        if (dto == null) {
+            throw new JeecgBootException("ERP推送入库单参数不能为空");
+        }
+        if (oConvertUtils.isEmpty(dto.getErpPoNo())) {
+            throw new JeecgBootException("ERP采购单号(erpPoNo)不能为空");
+        }
+        if (dto.getWarehouseId() == null) {
+            throw new JeecgBootException("请指定入库仓库(warehouseId)");
+        }
+        if (dto.getConsignorId() == null) {
+            throw new JeecgBootException("请指定货主(consignorId)");
+        }
+        if (dto.getDetails() == null || dto.getDetails().isEmpty()) {
+            throw new JeecgBootException("请至少推送一行入库商品明细");
+        }
+
+        // 幂等校验：同一货主下同一 ERP 采购单号若已存在对应有效入库单，直接返回已有单据信息
+        LambdaQueryWrapper<WmsWarehousingEntry> existQuery = new LambdaQueryWrapper<WmsWarehousingEntry>()
+                .eq(WmsWarehousingEntry::getConsignorId, dto.getConsignorId())
+                .eq(WmsWarehousingEntry::getErpPoNo, dto.getErpPoNo().trim())
+                .ne(WmsWarehousingEntry::getStatus, WmsEntryStatusEnum.CANCELLED.getCode())
+                .orderByDesc(WmsWarehousingEntry::getId)
+                .last("LIMIT 1");
+        WmsWarehousingEntry exist = baseMapper.selectOne(existQuery);
+        if (exist != null) {
+            log.info("ERP采购单号[{}]已存在对应入库单[{}]，直接返回已有入库单信息", dto.getErpPoNo(), exist.getEntryCode());
+            return WmsWarehousingEntryResultVo.builder()
+                    .entryId(exist.getId())
+                    .entryCode(exist.getEntryCode())
+                    .erpPoNo(exist.getErpPoNo())
+                    .batchNumber(exist.getBatchNumber())
+                    .status(exist.getStatus())
+                    .totalCount(exist.getTotalCount())
+                    .build();
+        }
+
+        WmsWarehouse warehouse = warehouseMapper.selectById(dto.getWarehouseId());
+        if (warehouse == null) {
+            throw new JeecgBootException("入库仓库不存在");
+        }
+        WmsConsignor consignor = consignorMapper.selectById(dto.getConsignorId());
+        if (consignor == null) {
+            throw new JeecgBootException("货主不存在，请先在「基础数据-货主信息」中维护");
+        }
+        if (consignor.getEnableStatus() != null && consignor.getEnableStatus() != 1) {
+            throw new JeecgBootException("货主「" + consignor.getConsignorName() + "」已停用，不能建新入库单");
+        }
+
+        int entryType = dto.getEntryType() == null ? 1 : dto.getEntryType();
+        Date now = new Date();
+        // 批次号自动生成：若 ERP 未指定则系统自动生成整单唯一批次号
+        String batchNumber = oConvertUtils.isEmpty(dto.getBatchNumber())
+                ? nextBatchNumber() : dto.getBatchNumber().trim();
+        Date predictedArrival = dto.getPredictedArrivalTime() == null ? now : dto.getPredictedArrivalTime();
+
+        int totalCount = 0;
+        List<WmsWarehousingEntryDetails> detailEntities = new ArrayList<>();
+        for (ErpWarehousingEntryDetailDto line : dto.getDetails()) {
+            if (line == null || line.getSkuId() == null) {
+                throw new JeecgBootException("明细行的商品信息不能为空");
+            }
+            if (line.getCount() == null || line.getCount() <= 0) {
+                throw new JeecgBootException("明细行的计划数量必须大于0");
+            }
+            WmsItemSku sku = skuMapper.selectById(line.getSkuId());
+            if (sku == null) {
+                throw new JeecgBootException("明细行引用的商品信息不存在：" + line.getSkuId());
+            }
+            totalCount += line.getCount();
+            detailEntities.add(new WmsWarehousingEntryDetails()
+                    .setSkuId(line.getSkuId())
+                    .setBatchNumber(batchNumber)
+                    .setProdDate(line.getProdDate())
+                    .setExpireDate(resolveExpireDate(sku, line.getProdDate(), line.getExpireDate()))
+                    .setCount(line.getCount())
+                    .setReceivedCount(0)
+                    .setSupplierId(line.getSupplierId() == null
+                            ? defaultSupplierId(sku) : line.getSupplierId())
+                    .setPrice(toCents(line.getPrice()))
+                    .setRealArrivalTime(null)
+                    .setPredictedArrivalTime(line.getPredictedArrivalTime() == null
+                            ? predictedArrival : line.getPredictedArrivalTime())
+                    .setStatus(1)
+                    .setQcStatus(WmsQcStatusEnum.PENDING.getCode())
+                    .setQcPassCount(0)
+                    .setQcFailCount(0)
+                    .setCreateTime(now)
+                    .setIsDel(1));
+        }
+
+        WmsWarehousingEntry entry = new WmsWarehousingEntry()
+                .setEntryCode(nextCode(ENTRY_CODE_PREFIX))
+                .setEntryType(entryType)
+                .setErpPoNo(dto.getErpPoNo().trim())
+                .setMesWorkOrderNo(dto.getMesWorkOrderNo())
+                .setConsignorId(dto.getConsignorId())
+                .setBatchNumber(batchNumber)
+                .setTotalCount(totalCount)
+                .setPredictedArrivalTime(predictedArrival)
+                .setWarehouseId(dto.getWarehouseId())
+                .setDamageCount(0)
+                .setSurpassCount(0)
+                .setOverReceiveAuditStatus(WmsOverReceiveStatusEnum.NONE.getCode())
+                .setStatus(WmsEntryStatusEnum.ARRIVING.getCode())
+                .setLackCount(0)
+                .setWaitSupplementFlag(0)
+                .setCreateTime(now)
+                .setCreateBy(currentUsername() != null ? currentUsername() : "ERP-PUSH")
+                .setIsDel(1);
+        baseMapper.insert(entry);
+
+        for (WmsWarehousingEntryDetails detail : detailEntities) {
+            detail.setWarehousingEntryId(entry.getId());
+            detailsMapper.insert(detail);
+        }
+
+        return WmsWarehousingEntryResultVo.builder()
+                .entryId(entry.getId())
+                .entryCode(entry.getEntryCode())
+                .erpPoNo(entry.getErpPoNo())
+                .batchNumber(entry.getBatchNumber())
+                .status(entry.getStatus())
+                .totalCount(entry.getTotalCount())
+                .build();
     }
 
     @Override
@@ -840,8 +968,10 @@ public class WmsWarehousingEntryServiceImpl
             }
 
             WmsItemSku sku = skuMapper.selectById(detail.getSkuId());
-            int unitVolume = unitVolume(sku);
-            int unitWeight = unitWeight(sku);
+            WmsItemSpu skuSpu = sku == null || sku.getSpuId() == null ? null : spuMapper.selectById(sku.getSpuId());
+            // 商品侧按 SPU 单位存，库位占用体积/重量按 cm³ / g 累加，先换算再累加
+            int unitVolume = WmsUnitConverter.skuUnitVolumeCm3(sku, skuSpu);
+            int unitWeight = WmsUnitConverter.skuUnitWeightG(sku, skuSpu);
 
             // 落库：库存 + 流水（INBOUND_PUTAWAY）
             WmsInventoryDimension dim = new WmsInventoryDimension()
@@ -1141,10 +1271,14 @@ public class WmsWarehousingEntryServiceImpl
 
     /** 有效期：明细给了就用，否则按 SPU 保质期天数从生产日期推 */
     private Date resolveExpireDate(WmsItemSku sku, WmsEntryDetailForm line) {
-        if (line.getExpireDate() != null) {
-            return line.getExpireDate();
+        return resolveExpireDate(sku, line != null ? line.getProdDate() : null, line != null ? line.getExpireDate() : null);
+    }
+
+    private Date resolveExpireDate(WmsItemSku sku, Date prodDate, Date expireDate) {
+        if (expireDate != null) {
+            return expireDate;
         }
-        if (line.getProdDate() == null || sku == null || sku.getSpuId() == null) {
+        if (prodDate == null || sku == null || sku.getSpuId() == null) {
             return null;
         }
         WmsItemSpu spu = spuMapper.selectById(sku.getSpuId());
@@ -1152,7 +1286,7 @@ public class WmsWarehousingEntryServiceImpl
             return null;
         }
         Calendar calendar = Calendar.getInstance();
-        calendar.setTime(line.getProdDate());
+        calendar.setTime(prodDate);
         calendar.add(Calendar.DAY_OF_MONTH, spu.getShelfLifeDays());
         return calendar.getTime();
     }
@@ -1172,21 +1306,6 @@ public class WmsWarehousingEntryServiceImpl
             return 0;
         }
         return price.multiply(BigDecimal.valueOf(100)).setScale(0, java.math.RoundingMode.HALF_UP).intValue();
-    }
-
-    private int unitVolume(WmsItemSku sku) {
-        int volume = sku == null ? 0 : countOf(sku.getProductVolume());
-        if (volume > 0) {
-            return volume;
-        }
-        int l = sku == null ? 0 : countOf(sku.getProductLength());
-        int w = sku == null ? 0 : countOf(sku.getProductWidth());
-        int h = sku == null ? 0 : countOf(sku.getProductHeight());
-        return l > 0 && w > 0 && h > 0 ? l * w * h : 0;
-    }
-
-    private int unitWeight(WmsItemSku sku) {
-        return sku == null ? 0 : countOf(sku.getProductWeight());
     }
 
     /** 偏离原因：人工填了就用手填的，没填给个默认说明，避免留空无法追溯 */

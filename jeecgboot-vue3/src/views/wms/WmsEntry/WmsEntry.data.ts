@@ -209,26 +209,6 @@ export const createSchema: FormSchema[] = [
     colProps: { span: 12 },
   },
   {
-    label: '批次号',
-    field: 'batchNumber',
-    component: 'Input',
-    helpMessage: '留空自动生成 B+日期+随机数',
-    colProps: { span: 12 },
-  },
-  {
-    label: 'ERP采购单号',
-    field: 'erpPoNo',
-    component: 'Input',
-    colProps: { span: 12 },
-  },
-  {
-    label: 'MES工单号',
-    field: 'mesWorkOrderNo',
-    component: 'Input',
-    helpMessage: '生产入库必填；工业制造仓在质检环节强制校验',
-    colProps: { span: 12 },
-  },
-  {
     label: '预测到达时间',
     field: 'predictedArrivalTime',
     component: 'DatePicker',
@@ -241,19 +221,15 @@ export const createSchema: FormSchema[] = [
   },
 ];
 
-/** 新建入库单的明细行（一行为一个 SKU 的计划数量） */
+/** 新建入库单的明细行 */
 export const createDetailColumns: JVxeColumn[] = [
   {
-    title: '商品SKU（编码 + 名称）',
+    title: '商品信息',
     key: 'skuId',
-    type: JVxeTypes.select,
-    width: 300,
-    // 表字典取的是 wms_item_sku_v，text 已经拼成「编码 商品名」，
-    // 只显示一串条码的话作业员根本认不出是哪个商品
-    dictCode: 'wms_item_sku_v,text,id',
-    allowSearch: true,
-    placeholder: '请选择SKU',
-    validateRules: [{ required: true, message: '请选择商品SKU' }],
+    type: JVxeTypes.slot,
+    slotName: 'skuSlot',
+    width: 320,
+    validateRules: [{ required: true, message: '请选择商品信息' }],
   },
   {
     title: '计划数量',
@@ -332,7 +308,7 @@ export const receiveViewColumns: BasicColumn[] = [
 /** 收货清点录入列（实收 / 破损 / SN 由作业员填） */
 export const receiveEditColumns: JVxeColumn[] = [
   {
-    title: '商品SKU',
+    title: '商品信息',
     key: 'skuCode',
     type: JVxeTypes.normal,
     width: 140,
@@ -409,7 +385,7 @@ export const detailViewColumns: BasicColumn[] = [
 
 /** 上架记录列 */
 export const putawayRecordColumns: BasicColumn[] = [
-  { title: '商品SKU（编码 + 名称）', align: 'left', width: 240, ellipsis: true, dataIndex: 'skuId_dictText' },
+  { title: '入库商品信息', align: 'left', width: 240, ellipsis: true, dataIndex: 'skuId_dictText' },
   { title: '批次号', align: 'center', width: 120, dataIndex: 'batchNumber' },
   { title: '上架库位', align: 'center', width: 130, dataIndex: 'warehouseAreaLocaId_dictText' },
   { title: '上架数量', align: 'center', width: 100, dataIndex: 'count' },

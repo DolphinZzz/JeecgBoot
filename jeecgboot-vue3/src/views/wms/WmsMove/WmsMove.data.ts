@@ -115,14 +115,14 @@ export const formSchema: FormSchema[] = [
 // 移库明细行（一行为一次「从某库位某批次移到另一库位」）
 export const detailColumns: JVxeColumn[] = [
   {
-    title: '商品SKU',
+    title: '商品信息',
     key: 'skuId',
     type: JVxeTypes.select,
     width: 200,
     dictCode: 'wms_item_sku_v,text,id',
     allowSearch: true,
-    placeholder: '请选择SKU',
-    validateRules: [{ required: true, message: '请选择商品SKU' }],
+    placeholder: '请选择商品信息',
+    validateRules: [{ required: true, message: '请选择商品信息' }],
   },
   {
     title: '批次号',
@@ -185,7 +185,7 @@ export const detailColumns: JVxeColumn[] = [
 
 // 作业明细展示列（详情弹窗）
 export const detailViewColumns: BasicColumn[] = [
-  { title: '商品SKU（编码 + 名称）', align: 'left', width: 250, ellipsis: true, dataIndex: 'skuId_dictText' },
+  { title: '商品信息', align: 'left', width: 250, ellipsis: true, dataIndex: 'skuId_dictText' },
   { title: '批次号', align: 'center', width: 130, dataIndex: 'batchNumber' },
   { title: '货主', align: 'center', width: 140, dataIndex: 'consignorId_dictText' },
   { title: '质量状态', align: 'center', width: 100, dataIndex: 'qualityStatus_dictText' },

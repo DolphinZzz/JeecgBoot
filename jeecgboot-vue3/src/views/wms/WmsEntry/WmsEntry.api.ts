@@ -57,3 +57,8 @@ export const queryPutawayRecords = (id) => defHttp.get({ url: Api.queryPutawayRe
  * 取消入库单
  */
 export const cancelEntry = (id) => defHttp.post({ url: Api.cancel, params: { id } }, { joinParamsToUrl: true, successMessageMode: 'none' });
+
+/**
+ * 商品选择器分页列表
+ */
+export const querySkuPageForSelect = (params) => defHttp.get({ url: '/wms/wmsItemSpu/querySkuPageForSelect', params });

@@ -1,3 +1,4 @@
+/*
 package org.jeecg;
 
 import com.xkcoding.justauth.autoconfigure.JustAuthAutoConfiguration;
@@ -16,10 +17,12 @@ import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
 
+*/
 /**
 * 单体启动类（采用此类启动为单体模式）
 * 报错提醒: 未集成mongo报错，可以打开启动类上面的注释 exclude={MongoAutoConfiguration.class}
-*/
+*//*
+
 @Slf4j
 @SpringBootApplication
 @ImportAutoConfiguration(JustAuthAutoConfiguration.class)  // spring boot 3.x justauth 兼容性处理
@@ -36,7 +39,7 @@ public class JeecgSystemApplication extends SpringBootServletInitializer {
         defaultProperties.put("management.health.elasticsearch.enabled", false);
         app.setDefaultProperties(defaultProperties);
         log.info("[JEECG] Elasticsearch Health Check Enabled: false" );
-        
+
         ConfigurableApplicationContext application = app.run(args);
         Environment env = application.getEnvironment();
         String ip = InetAddress.getLocalHost().getHostAddress();
@@ -51,4 +54,4 @@ public class JeecgSystemApplication extends SpringBootServletInitializer {
 
     }
 
-}
+}*/

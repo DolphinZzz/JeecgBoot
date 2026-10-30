@@ -13,6 +13,7 @@ import org.jeecg.modules.wms.mapper.WmsItemSkuMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSpuMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaLocaMapper;
 import org.jeecg.modules.wms.service.IWmsLocaCompatibilityService;
+import org.jeecg.modules.wms.util.WmsUnitConverter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -82,12 +83,10 @@ public class WmsLocaCompatibilityServiceImpl implements IWmsLocaCompatibilitySer
         }
 
         // ② 存储温区匹配（以 SPU 的存储条件为准，未设置按常温）
+        WmsItemSpu spu = sku.getSpuId() == null ? null : spuMapper.selectById(sku.getSpuId());
         String required = DEFAULT_STORAGE_CONDITION;
-        if (sku.getSpuId() != null) {
-            WmsItemSpu spu = spuMapper.selectById(sku.getSpuId());
-            if (spu != null && oConvertUtils.isNotEmpty(spu.getStorageCondition())) {
-                required = spu.getStorageCondition();
-            }
+        if (spu != null && oConvertUtils.isNotEmpty(spu.getStorageCondition())) {
+            required = spu.getStorageCondition();
         }
         String targetCondition = oConvertUtils.isEmpty(loca.getStorageCondition())
                 ? DEFAULT_STORAGE_CONDITION : loca.getStorageCondition();
@@ -114,9 +113,9 @@ public class WmsLocaCompatibilityServiceImpl implements IWmsLocaCompatibilitySer
             }
         }
 
-        // ④ 剩余容积与剩余承重（未配置时跳过）
-        int needVolume = (sku.getProductVolume() == null ? 0 : sku.getProductVolume()) * count;
-        int needWeight = (sku.getProductWeight() == null ? 0 : sku.getProductWeight()) * count;
+        // ④ 剩余容积与剩余承重（未配置时跳过）。商品侧按 SPU 单位换算到 cm³ / g 再比
+        int needVolume = WmsUnitConverter.skuUnitVolumeCm3(sku, spu) * count;
+        int needWeight = WmsUnitConverter.skuUnitWeightG(sku, spu) * count;
         int localVolume = loca.getLocalVolume() == null ? 0 : loca.getLocalVolume();
         int localBearing = loca.getLocalBearingCapacity() == null ? 0 : loca.getLocalBearingCapacity();
         int usedVolume = loca.getUsedVolume() == null ? 0 : loca.getUsedVolume();

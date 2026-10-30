@@ -43,7 +43,7 @@ export const columns: BasicColumn[] = [
     dataIndex: 'locaCode',
   },
   {
-    title: '商品SKU（编码 + 名称）',
+    title: '商品信息',
     align: 'left',
     width: 250,
     ellipsis: true,

@@ -1,7 +1,7 @@
-package org.jeecg.modules.wms.api.fallback;
+package org.jeecg.modules.mes.api.fallback;
 
 import org.springframework.cloud.openfeign.FallbackFactory;
-import org.jeecg.modules.wms.api.WmsHelloApi;
+import org.jeecg.modules.mes.api.MesHelloApi;
 import lombok.Setter;
 import org.springframework.stereotype.Component;
 import lombok.extern.slf4j.Slf4j;
@@ -11,12 +11,12 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-public class WmsHelloFallback implements FallbackFactory<WmsHelloApi> {
+public class MesHelloFallback implements FallbackFactory<MesHelloApi> {
     @Setter
     private Throwable cause;
 
     @Override
-    public WmsHelloApi create(Throwable throwable) {
+    public MesHelloApi create(Throwable throwable) {
         log.error("微服务接口调用失败： {}", cause);
         return null;
     }

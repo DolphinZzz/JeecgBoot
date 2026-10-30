@@ -24,4 +24,37 @@
         ORDER BY r.batch_id DESC, r.id DESC
         LIMIT 1
     </select>
+
+    <!-- 商品信息选择器联查 -->
+    <select id="selectSkuPageForSelect" resultType="org.jeecg.modules.wms.vo.WmsItemSkuSelectVo">
+        SELECT
+            s.id AS id,
+            s.spu_id AS spuId,
+            s.code AS skuCode,
+            p.sub_title AS spuCode,
+            p.title AS spuName,
+            c.name AS categoryName,
+            p.category_id1 AS categoryId,
+            s.price AS price,
+            p.supplier_id AS supplierId,
+            sup.supplier_name AS supplierName,
+            s.is_sn_managed AS isSnManaged
+        FROM wms_item_sku s
+        INNER JOIN wms_item_spu p ON s.spu_id = p.id AND p.is_del = 1
+        LEFT JOIN wms_item_category c ON c.id = p.category_id1 AND c.is_del = 1
+        LEFT JOIN wms_supplier sup ON sup.id = p.supplier_id AND sup.is_del = 1
+        <where>
+            s.is_del = 1
+            <if test="spuName != null and spuName != ''">
+                AND p.title LIKE CONCAT('%', #{spuName}, '%')
+            </if>
+            <if test="skuCode != null and skuCode != ''">
+                AND (s.code LIKE CONCAT('%', #{skuCode}, '%') OR p.sub_title LIKE CONCAT('%', #{skuCode}, '%'))
+            </if>
+            <if test="categoryId != null">
+                AND (p.category_id1 = #{categoryId} OR p.category_id2 = #{categoryId} OR p.category_id3 = #{categoryId})
+            </if>
+        </where>
+        ORDER BY s.id DESC
+    </select>
 </mapper>

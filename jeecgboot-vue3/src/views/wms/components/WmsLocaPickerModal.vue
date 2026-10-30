@@ -22,12 +22,6 @@
         </span>
       </div>
 
-      <a-alert v-if="skuText" type="info" show-icon style="margin-bottom: 8px">
-        <template #message>
-          正在为 <b>{{ skuText }}</b> 选库位，带 <b>⚠</b> 的库位未通过分区/温区/混放/容积校验，需勾选「强制上架」才能提交。
-        </template>
-      </a-alert>
-
       <a-table
         size="small"
         rowKey="locaId"
@@ -92,7 +86,6 @@
   const areaId = ref<number | undefined>();
   const onlyAllowed = ref(false);
   const selectedRowKeys = ref<(string | number)[]>([]);
-  const skuText = ref('');
   const skuId = ref<number | undefined>();
   /** 打开时传入的已选库位，回显选中行 */
   const initLocaId = ref<number | undefined>();
@@ -200,7 +193,6 @@
     selectedRowKeys.value = [];
     current.value = 1;
     skuId.value = data?.skuId ? Number(data.skuId) : undefined;
-    skuText.value = data?.skuText || '';
     initLocaId.value = data?.locaId ? Number(data.locaId) : undefined;
     title.value = data?.title || '选择库位';
     loading.value = true;

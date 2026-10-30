@@ -53,7 +53,7 @@ export const columns: BasicColumn[] = [
     customRender: ({ text }) => (text === 'INDUSTRIAL' ? '工业制造仓' : text ? '普通仓' : '-'),
   },
   {
-    title: '商品SKU（编码 + 名称）',
+    title: '商品信息',
     align: 'left',
     width: 250,
     ellipsis: true,
@@ -178,7 +178,7 @@ export const submitFormSchema: FormSchema[] = [
     colProps: { span: 12 },
   },
   {
-    label: '商品SKU',
+    label: '商品信息',
     field: 'skuText',
     component: 'Input',
     dynamicDisabled: true,

@@ -180,7 +180,7 @@ export const createFormSchema: FormSchema[] = [
 // 录入实盘数
 export const countFormSchema: FormSchema[] = [
   {
-    label: '商品SKU',
+    label: '商品信息',
     field: 'skuIdText',
     component: 'Input',
     dynamicDisabled: true,

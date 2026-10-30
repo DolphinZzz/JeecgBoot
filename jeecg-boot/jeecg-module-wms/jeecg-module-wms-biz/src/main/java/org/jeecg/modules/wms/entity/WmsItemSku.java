@@ -89,27 +89,27 @@ public class WmsItemSku implements Serializable {
     @Schema(description = "冗余单位列，页面不使用", hidden = true)
     private Integer unit;
 
-    /**商品重量*/
+    /**商品重量，单位取 SPU 的 weightUnit*/
     @Excel(name = "商品重量", width = 15)
     @Schema(description = "商品重量")
     private Integer productWeight;
 
-    /**商品长度*/
+    /**商品长度，单位取 SPU 的 lengthUnit*/
     @Excel(name = "商品长度", width = 15)
     @Schema(description = "商品长度")
     private Integer productLength;
 
-    /**商品宽度*/
+    /**商品宽度，单位取 SPU 的 lengthUnit*/
     @Excel(name = "商品宽度", width = 15)
     @Schema(description = "商品宽度")
     private Integer productWidth;
 
-    /**商品高度*/
+    /**商品高度，单位取 SPU 的 lengthUnit*/
     @Excel(name = "商品高度", width = 15)
     @Schema(description = "商品高度")
     private Integer productHeight;
 
-    /**商品体积*/
+    /**商品体积，单位取 SPU 的 volumeUnit*/
     @Excel(name = "商品体积", width = 15)
     @Schema(description = "商品体积")
     private Integer productVolume;

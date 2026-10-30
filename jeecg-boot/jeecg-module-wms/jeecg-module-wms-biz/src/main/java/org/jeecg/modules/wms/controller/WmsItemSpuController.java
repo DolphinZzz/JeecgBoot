@@ -23,6 +23,7 @@ import org.jeecg.common.system.query.QueryGenerator;
 import org.jeecg.common.util.oConvertUtils;
 import org.jeecg.modules.wms.entity.WmsItemSpu;
 import org.jeecg.modules.wms.entity.WmsItemSku;
+import org.jeecg.modules.wms.vo.WmsItemSkuSelectVo;
 import org.jeecg.modules.wms.vo.WmsItemSpuPage;
 import org.jeecg.modules.wms.service.IWmsItemSpuService;
 import org.jeecg.modules.wms.service.IWmsItemSkuService;
@@ -238,5 +239,20 @@ public class WmsItemSpuController {
             }
         }
         return Result.OK("文件导入失败！");
+    }
+
+    /**
+     * 商品选择器分页列表（供新建入库单等弹窗选择商品使用）
+     */
+    @Operation(summary = "商品选择器-分页列表查询")
+    @GetMapping(value = "/querySkuPageForSelect")
+    public Result<IPage<WmsItemSkuSelectVo>> querySkuPageForSelect(
+            @RequestParam(name = "spuName", required = false) String spuName,
+            @RequestParam(name = "skuCode", required = false) String skuCode,
+            @RequestParam(name = "categoryId", required = false) Integer categoryId,
+            @RequestParam(name = "pageNo", defaultValue = "1") Integer pageNo,
+            @RequestParam(name = "pageSize", defaultValue = "10") Integer pageSize) {
+        IPage<WmsItemSkuSelectVo> page = wmsItemSkuService.selectSkuPageForSelect(pageNo, pageSize, spuName, skuCode, categoryId);
+        return Result.OK(page);
     }
 }

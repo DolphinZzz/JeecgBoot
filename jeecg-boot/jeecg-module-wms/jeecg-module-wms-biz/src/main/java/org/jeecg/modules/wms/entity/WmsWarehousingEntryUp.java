@@ -47,7 +47,7 @@ public class WmsWarehousingEntryUp implements Serializable {
     private Long warehousingEntryId;
 
     /**规格ID*/
-    @Excel(name = "商品SKU", width = 18, dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
+    @Excel(name = "入库商品信息", width = 18, dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
     @Dict(dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
     @Schema(description = "规格ID")
     private Long skuId;

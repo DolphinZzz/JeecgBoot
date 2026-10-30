@@ -1,6 +1,8 @@
 package org.jeecg.modules.wms.service.impl;
 
 import org.jeecg.common.exception.JeecgBootException;
+import org.jeecg.modules.wms.dto.ErpWarehousingEntryCreateDto;
+import org.jeecg.modules.wms.dto.ErpWarehousingEntryDetailDto;
 import org.jeecg.modules.wms.entity.WmsConsignor;
 import org.jeecg.modules.wms.entity.WmsItemSku;
 import org.jeecg.modules.wms.entity.WmsQualityCheck;
@@ -10,6 +12,7 @@ import org.jeecg.modules.wms.entity.WmsWarehousingEntryDetails;
 import org.jeecg.modules.wms.enums.WmsEntryStatusEnum;
 import org.jeecg.modules.wms.enums.WmsOverReceiveStatusEnum;
 import org.jeecg.modules.wms.enums.WmsQcStatusEnum;
+import org.jeecg.modules.wms.vo.WmsWarehousingEntryResultVo;
 import org.jeecg.modules.wms.mapper.WmsInventoryMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSkuMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSnMapper;
@@ -551,5 +554,62 @@ public class WmsWarehousingEntryServiceImplTest {
         entry.setStatus(WmsEntryStatusEnum.ARRIVING.getCode());
         entryService.cancel(ENTRY_ID);
         verify(entryMapper).updateById(ArgumentMatchers.<WmsWarehousingEntry>argThat(e -> e.getStatus() == WmsEntryStatusEnum.CANCELLED.getCode()));
+    }
+
+    @Test
+    void erpCreateRequiresErpPoNo() {
+        ErpWarehousingEntryCreateDto dto = new ErpWarehousingEntryCreateDto();
+        dto.setWarehouseId(1);
+        dto.setConsignorId(1L);
+        assertThrows(JeecgBootException.class, () -> entryService.createEntryFromErp(dto));
+    }
+
+    @Test
+    void erpCreateAutoGeneratesBatchNumberWhenEmpty() {
+        when(warehouseMapper.selectById(1)).thenReturn(new WmsWarehouse().setId(1).setWarehouseType("NORMAL"));
+        when(consignorMapper.selectById(1L)).thenReturn(new WmsConsignor().setId(1).setConsignorName("货主A").setEnableStatus(1));
+        when(skuMapper.selectById(101L)).thenReturn(new WmsItemSku().setId(101L).setSpuId(1L));
+
+        ErpWarehousingEntryCreateDto dto = new ErpWarehousingEntryCreateDto();
+        dto.setErpPoNo("PO-20261031-001");
+        dto.setWarehouseId(1);
+        dto.setConsignorId(1L);
+        ErpWarehousingEntryDetailDto detail = new ErpWarehousingEntryDetailDto();
+        detail.setSkuId(101L);
+        detail.setCount(10);
+        dto.setDetails(Collections.singletonList(detail));
+
+        WmsWarehousingEntryResultVo result = entryService.createEntryFromErp(dto);
+
+        assertNotNull(result);
+        assertEquals("PO-20261031-001", result.getErpPoNo());
+        assertNotNull(result.getBatchNumber());
+        assertTrue(result.getBatchNumber().startsWith("B"));
+        assertEquals(10, result.getTotalCount());
+        verify(entryMapper).insert(ArgumentMatchers.<WmsWarehousingEntry>argThat(e ->
+                e.getBatchNumber().startsWith("B") && "PO-20261031-001".equals(e.getErpPoNo())));
+    }
+
+    @Test
+    void erpCreatePreservesBatchNumberWhenProvided() {
+        when(warehouseMapper.selectById(1)).thenReturn(new WmsWarehouse().setId(1).setWarehouseType("NORMAL"));
+        when(consignorMapper.selectById(1L)).thenReturn(new WmsConsignor().setId(1).setConsignorName("货主A").setEnableStatus(1));
+        when(skuMapper.selectById(101L)).thenReturn(new WmsItemSku().setId(101L).setSpuId(1L));
+
+        ErpWarehousingEntryCreateDto dto = new ErpWarehousingEntryCreateDto();
+        dto.setErpPoNo("PO-20261031-002");
+        dto.setBatchNumber("CUSTOM-BATCH-888");
+        dto.setWarehouseId(1);
+        dto.setConsignorId(1L);
+        ErpWarehousingEntryDetailDto detail = new ErpWarehousingEntryDetailDto();
+        detail.setSkuId(101L);
+        detail.setCount(20);
+        dto.setDetails(Collections.singletonList(detail));
+
+        WmsWarehousingEntryResultVo result = entryService.createEntryFromErp(dto);
+
+        assertNotNull(result);
+        assertEquals("CUSTOM-BATCH-888", result.getBatchNumber());
+        assertEquals(20, result.getTotalCount());
     }
 }

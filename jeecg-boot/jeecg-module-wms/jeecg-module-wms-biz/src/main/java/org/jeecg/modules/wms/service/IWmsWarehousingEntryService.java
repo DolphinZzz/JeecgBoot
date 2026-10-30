@@ -42,6 +42,14 @@ public interface IWmsWarehousingEntryService extends IService<WmsWarehousingEntr
     /** 新建入库单（含明细），状态置 10 待到货 */
     WmsWarehousingEntry createEntry(WmsEntryCreateForm form);
 
+    /**
+     * ERP 推送创建入库单（带 ERP 采购单号，批次号未指定则自动生成）
+     *
+     * @param dto ERP推送数据
+     * @return 创建结果
+     */
+    org.jeecg.modules.wms.vo.WmsWarehousingEntryResultVo createEntryFromErp(org.jeecg.modules.wms.dto.ErpWarehousingEntryCreateDto dto);
+
     /** 查明细（带商品编码 / 名称 / 默认质检方式 / 已上架数） */
     List<WmsEntryDetailView> listDetails(Long entryId);
 

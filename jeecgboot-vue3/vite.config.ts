@@ -191,6 +191,28 @@ export default async ({ command, mode }: ConfigEnv): Promise<UserConfig> => {
         'clipboard',
         '@vue/shared',
         '@iconify/iconify',
+        // 表单 componentMap 里的 antd 组件是「打开表单时才被动态 import」的：不在启动时列进
+        // include，Vite 会在首次渲染该控件时才发现依赖 → 重新预构建 → 页面 reload，
+        // 这一瞬间动态 import 拿到 504，异步组件加载失败就永久留空（表单里表现为「只有标签、没有输入框」）。
+        'ant-design-vue/es/input',
+        'ant-design-vue/es/input/Group',
+        'ant-design-vue/es/input/Password',
+        'ant-design-vue/es/input/Search',
+        'ant-design-vue/es/input/TextArea',
+        'ant-design-vue/es/input-number',
+        'ant-design-vue/es/auto-complete',
+        'ant-design-vue/es/select',
+        'ant-design-vue/es/tree-select',
+        'ant-design-vue/es/switch',
+        'ant-design-vue/es/radio/Group',
+        'ant-design-vue/es/checkbox',
+        'ant-design-vue/es/checkbox/Group',
+        'ant-design-vue/es/cascader',
+        'ant-design-vue/es/slider',
+        'ant-design-vue/es/rate',
+        'ant-design-vue/es/date-picker',
+        'ant-design-vue/es/time-picker',
+        'ant-design-vue/es/divider',
         'ant-design-vue/es/locale/zh_CN',
         'ant-design-vue/es/locale/en_US',
         // Vite 默认不扫描 node_modules 里已打包的 mjs，导致 ant-design-vue/es/vc-picker/generate/dayjs.js

@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.jeecg.common.api.vo.Result;
 import org.jeecg.common.aspect.annotation.AutoLog;
+import org.jeecg.modules.wms.dto.ErpWarehousingEntryCreateDto;
 import org.jeecg.modules.wms.entity.WmsWarehousingEntry;
 import org.jeecg.modules.wms.entity.WmsWarehousingEntryUp;
 import org.jeecg.modules.wms.service.IWmsWarehousingEntryService;
@@ -17,6 +18,7 @@ import org.jeecg.modules.wms.vo.WmsEntryDetailView;
 import org.jeecg.modules.wms.vo.WmsEntryPage;
 import org.jeecg.modules.wms.vo.WmsEntryQuery;
 import org.jeecg.modules.wms.vo.WmsReceiveForm;
+import org.jeecg.modules.wms.vo.WmsWarehousingEntryResultVo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -59,6 +61,17 @@ public class WmsWarehousingEntryController {
     public Result<WmsWarehousingEntry> add(@RequestBody WmsEntryCreateForm form) {
         WmsWarehousingEntry entry = entryService.createEntry(form);
         return Result.OK("入库单[" + entry.getEntryCode() + "]已创建", entry);
+    }
+
+    /**
+     * ERP系统通过HTTP协议推送创建入库单（支持FeignClient或直接HTTP调用）
+     */
+    @AutoLog(value = "入库单-ERP推送创建")
+    @Operation(summary = "入库单-ERP推送创建")
+    @PostMapping(value = "/createFromErp")
+    public Result<WmsWarehousingEntryResultVo> createFromErp(@RequestBody ErpWarehousingEntryCreateDto dto) {
+        WmsWarehousingEntryResultVo result = entryService.createEntryFromErp(dto);
+        return Result.OK("ERP采购单[" + result.getErpPoNo() + "]对应入库单[" + result.getEntryCode() + "]已创建", result);
     }
 
     /**

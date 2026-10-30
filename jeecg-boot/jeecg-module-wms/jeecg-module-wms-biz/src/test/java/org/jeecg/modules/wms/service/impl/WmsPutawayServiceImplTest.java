@@ -555,4 +555,44 @@ public class WmsPutawayServiceImplTest {
         WmsWarehouseAreaLoca result = putawayService.checkForcedLoca(request(1), 5);
         assertEquals(Integer.valueOf(5), result.getId());
     }
+
+    @Test
+    void locaOptionRemainCountFollowsSkuMeasureUnits() {
+        // 商品按 dm³ / kg 录，库位按 cm³ / g 配：不换算会得出 1000 件，换算后是 1 件
+        sku.setProductVolume(1200).setProductWeight(500);
+        WmsItemSpu spu = spu("NORMAL", 0).setVolumeUnit("dm³").setWeightUnit("kg").setLengthUnit("cm");
+        stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL").setName("常温存储区A"));
+        when(locaMapper.selectList(any())).thenReturn(
+                Collections.singletonList(loca(1, "L-01", 1, 1200000, 500000)));
+        when(inventoryMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(skuMapper.selectById(SKU_ID)).thenReturn(sku);
+        when(spuMapper.selectById(1L)).thenReturn(spu);
+        when(warehouseMapper.selectById(WAREHOUSE_ID)).thenReturn(new WmsWarehouse().setId(WAREHOUSE_ID).setName("上海一号仓"));
+
+        WmsPutawayLocaOption option = putawayService.listLocaOptions(request(1)).get(0);
+
+        assertEquals(Integer.valueOf(1200000), option.getRemainVolume());
+        assertEquals(Integer.valueOf(1), option.getRemainCount(),
+                "1200 dm³ = 1200000 cm³，500 kg = 500000 g，两种口径都只够 1 件");
+    }
+
+    @Test
+    void capacityFallsBackToDimsInSkuLengthUnit() {
+        // 只维护长宽高、单位 mm：100 × 100 × 100 mm = 1000 cm³，3000 cm³ 的库位放 3 件
+        sku.setProductVolume(null).setProductWeight(null)
+                .setProductLength(100).setProductWidth(100).setProductHeight(100);
+        WmsItemSpu spu = spu("NORMAL", 0).setLengthUnit("mm");
+        stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL"));
+        when(locaMapper.selectList(any())).thenReturn(
+                Collections.singletonList(loca(1, "L-01", 1, 3000, 100000)));
+        when(inventoryMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(skuMapper.selectById(SKU_ID)).thenReturn(sku);
+        when(spuMapper.selectById(1L)).thenReturn(spu);
+
+        WmsPutawayPlan plan = putawayService.recommend(request(5));
+
+        assertEquals(3, plan.getLines().get(0).getCount(),
+                "mm 当 cm 算会把单件体积放大 1000 倍，一件都放不下");
+        assertEquals(2, plan.getRemainCount());
+    }
 }

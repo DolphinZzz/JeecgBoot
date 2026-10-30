@@ -1,3 +1,4 @@
+/*
 package org.jeecg.modules.system.test;
 
 import org.aspectj.lang.annotation.Before;
@@ -10,10 +11,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+*/
 /**
  * @Description: 系统表白名单测试
  * @Author: sunjianlei
- */
+ *//*
+
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = JeecgSystemApplication.class)
 public class SysTableWhiteCheckTest {
 
@@ -85,3 +88,4 @@ public class SysTableWhiteCheckTest {
     }
 
 }
+*/

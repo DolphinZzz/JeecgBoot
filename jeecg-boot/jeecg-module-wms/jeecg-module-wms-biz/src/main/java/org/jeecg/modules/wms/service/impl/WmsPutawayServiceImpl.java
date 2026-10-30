@@ -25,6 +25,7 @@ import org.jeecg.modules.wms.vo.WmsPutawayLocaOption;
 import org.jeecg.modules.wms.vo.WmsPutawayPlan;
 import org.jeecg.modules.wms.vo.WmsPutawayPlanLine;
 import org.jeecg.modules.wms.vo.WmsPutawayRequest;
+import org.jeecg.modules.wms.util.WmsUnitConverter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -216,7 +217,7 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
                 rejected.merge(reasonOf(e.getMessage(), loca.getLocaCode()), 1, Integer::sum);
                 continue;
             }
-            WmsPutawayCandidate candidate = buildCandidate(request, sku, loca, area, occupied);
+            WmsPutawayCandidate candidate = buildCandidate(request, sku, spu, loca, area, occupied);
             candidate.setLevelGap(levelGap(loca.getAbcClass(), itemLevel));
             if (!allowUpgradeOccupy && candidate.getLevelGap() < 0) {
                 // 比商品等级高的库位默认不可占用（putaway_allow_upgrade_occupy = 0）
@@ -307,31 +308,31 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
             }
         }
 
-        // ⑦ 剩余容积与剩余承重（未配置时跳过该项，IN-05）
-        int needVolume = unitVolume(sku) * count;
-        int needWeight = unitWeight(sku) * count;
+        // ⑦ 剩余容积与剩余承重（未配置时跳过该项，IN-05）。商品侧按 SPU 单位换算到 cm³ / g 再比
+        int needVolume = WmsUnitConverter.skuUnitVolumeCm3(sku, spu) * count;
+        int needWeight = WmsUnitConverter.skuUnitWeightG(sku, spu) * count;
         int localVolume = countOf(loca.getLocalVolume());
         int localBearing = countOf(loca.getLocalBearingCapacity());
         int usedVolume = countOf(loca.getUsedVolume());
         int usedWeight = countOf(loca.getUsedWeight());
         if (localVolume > 0 && usedVolume + needVolume > localVolume) {
             throw new JeecgBootException(String.format(
-                    "库位[%s]容积不足：剩余 %d，本次需要 %d", locaCode, localVolume - usedVolume, needVolume));
+                    "库位[%s]容积不足：剩余 %d cm³，本次需要 %d cm³", locaCode, localVolume - usedVolume, needVolume));
         }
         if (localBearing > 0 && usedWeight + needWeight > localBearing) {
             throw new JeecgBootException(String.format(
-                    "库位[%s]承重不足：剩余 %d，本次需要 %d", locaCode, localBearing - usedWeight, needWeight));
+                    "库位[%s]承重不足：剩余 %d g，本次需要 %d g", locaCode, localBearing - usedWeight, needWeight));
         }
     }
 
     /**
      * 把硬过滤通过的库位包装成候选，预先算好排序与拆分要用的派生字段。
      */
-    private WmsPutawayCandidate buildCandidate(WmsPutawayRequest request, WmsItemSku sku,
+    private WmsPutawayCandidate buildCandidate(WmsPutawayRequest request, WmsItemSku sku, WmsItemSpu spu,
                                                WmsWarehouseAreaLoca loca, WmsWarehouseArea area,
                                                List<WmsInventory> occupied) {
-        int unitVolume = unitVolume(sku);
-        int unitWeight = unitWeight(sku);
+        int unitVolume = WmsUnitConverter.skuUnitVolumeCm3(sku, spu);
+        int unitWeight = WmsUnitConverter.skuUnitWeightG(sku, spu);
         int localVolume = countOf(loca.getLocalVolume());
         int localBearing = countOf(loca.getLocalBearingCapacity());
         int remainVolume = localVolume > 0
@@ -505,11 +506,12 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
         int largeSide = strategyConfigService.getIntConfig(warehouseId, "zone_large_side", 1200);
         int smallVolume = strategyConfigService.getIntConfig(warehouseId, "zone_small_volume", 1000);
 
-        int volume = convertVolume(sku.getProductVolume(), spu);
-        int weight = convertWeight(sku.getProductWeight(), spu);
+        int volume = WmsUnitConverter.volumeToCm3(sku.getProductVolume(), spu);
+        int weight = WmsUnitConverter.weightToG(sku.getProductWeight(), spu);
         int maxSide = Math.max(
-                Math.max(convertLength(sku.getProductLength(), spu), convertLength(sku.getProductWidth(), spu)),
-                convertLength(sku.getProductHeight(), spu));
+                Math.max(WmsUnitConverter.lengthToMm(sku.getProductLength(), spu),
+                        WmsUnitConverter.lengthToMm(sku.getProductWidth(), spu)),
+                WmsUnitConverter.lengthToMm(sku.getProductHeight(), spu));
         boolean valuable = spu != null && spu.getIsValuable() != null && spu.getIsValuable() == 1;
 
         return WmsZoneTypeEnum.derive(valuable, price, valuablePrice,
@@ -590,74 +592,6 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
             return area.getStorageCondition();
         }
         return DEFAULT_STORAGE_CONDITION;
-    }
-
-    // --- 单位换算：入库比较前统一到 mm / g / cm³ ---
-
-    private int convertLength(Integer value, WmsItemSpu spu) {
-        if (value == null) {
-            return 0;
-        }
-        String unit = spu == null || spu.getLengthUnit() == null ? "mm" : spu.getLengthUnit().trim().toLowerCase();
-        switch (unit) {
-            case "cm":
-                return value * 10;
-            case "dm":
-                return value * 100;
-            case "m":
-                return value * 1000;
-            default:
-                return value;
-        }
-    }
-
-    private int convertWeight(Integer value, WmsItemSpu spu) {
-        if (value == null) {
-            return 0;
-        }
-        String unit = spu == null || spu.getWeightUnit() == null ? "g" : spu.getWeightUnit().trim().toLowerCase();
-        switch (unit) {
-            case "mg":
-                return value / 1000;
-            case "kg":
-                return value * 1000;
-            default:
-                return value;
-        }
-    }
-
-    private int convertVolume(Integer value, WmsItemSpu spu) {
-        if (value == null) {
-            return 0;
-        }
-        String unit = spu == null || spu.getVolumeUnit() == null ? "cm³" : spu.getVolumeUnit().trim().toLowerCase();
-        switch (unit) {
-            case "dm³":
-            case "dm3":
-            case "l":
-                return value * 1000;
-            case "m³":
-            case "m3":
-                return value * 1000000;
-            default:
-                return value;
-        }
-    }
-
-    /** 单件体积（cm³）。商品没维护体积时用长宽高估算，仍为 0 表示不占体积 */
-    private int unitVolume(WmsItemSku sku) {
-        int volume = countOf(sku.getProductVolume());
-        if (volume > 0) {
-            return volume;
-        }
-        int l = countOf(sku.getProductLength());
-        int w = countOf(sku.getProductWidth());
-        int h = countOf(sku.getProductHeight());
-        return l > 0 && w > 0 && h > 0 ? l * w * h : 0;
-    }
-
-    private int unitWeight(WmsItemSku sku) {
-        return countOf(sku.getProductWeight());
     }
 
     private int countOf(Integer value) {
@@ -798,7 +732,7 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
                     .setPositionNumber(loca.getPositionNumber())
                     .setRemainVolume(remainVolume)
                     .setRemainWeight(remainWeight)
-                    .setRemainCount(remainCount(sku, remainVolume, remainWeight))
+                    .setRemainCount(remainCount(sku, spu, remainVolume, remainWeight))
                     .setFixedSkuId(loca.getFixedSkuId())
                     .setAllowed(reason.isEmpty())
                     .setRejectReason(reason.isEmpty() ? null : reason));
@@ -810,12 +744,12 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
      * 该库位按本商品还能放几件：min(⌊剩余容积/单件体积⌋, ⌊剩余承重/单件重量⌋)。
      * 商品没维护体积重量（单件为 0）或库位没配容积承重时无法估算，返回 null。
      */
-    private Integer remainCount(WmsItemSku sku, Integer remainVolume, Integer remainWeight) {
+    private Integer remainCount(WmsItemSku sku, WmsItemSpu spu, Integer remainVolume, Integer remainWeight) {
         if (sku == null) {
             return null;
         }
-        int unitVolume = unitVolume(sku);
-        int unitWeight = unitWeight(sku);
+        int unitVolume = WmsUnitConverter.skuUnitVolumeCm3(sku, spu);
+        int unitWeight = WmsUnitConverter.skuUnitWeightG(sku, spu);
         int volumeCap = unitVolume > 0 && remainVolume != null ? remainVolume / unitVolume : UNLIMITED;
         int weightCap = unitWeight > 0 && remainWeight != null ? remainWeight / unitWeight : UNLIMITED;
         int cap = Math.min(volumeCap, weightCap);
