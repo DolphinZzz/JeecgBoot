@@ -33,4 +33,20 @@ public interface IWmsPutawayService {
      * @throws org.jeecg.common.exception.JeecgBootException 未通过时抛出具体原因
      */
     WmsWarehouseAreaLoca checkTargetLoca(WmsPutawayRequest request, Integer locaId);
+
+    /**
+     * 人工指定库位的下拉选项：只列本仓库、排除盘点锁定与禁用的库位，按库区分组。
+     * 每个选项带上它自己的硬过滤结论（allowed / rejectReason），页面上标红，
+     * 但不禁用 —— 推荐为空时作业员必须能强制指定，原因由提交时强制填写。
+     */
+    java.util.List<org.jeecg.modules.wms.vo.WmsPutawayLocaOption> listLocaOptions(WmsPutawayRequest request);
+
+    /**
+     * 强制指定库位时的校验：只守「物理上绝不能放」的两条 —— 库位属于本仓库、
+     * 未禁用且未盘点锁定。分区、温区、混放、容积承重这些业务约束全部放行，
+     * 由调用方强制记录偏离原因留痕（推荐为空时的唯一出路）。
+     *
+     * @throws org.jeecg.common.exception.JeecgBootException 违反上述两条时抛出
+     */
+    WmsWarehouseAreaLoca checkForcedLoca(WmsPutawayRequest request, Integer locaId);
 }

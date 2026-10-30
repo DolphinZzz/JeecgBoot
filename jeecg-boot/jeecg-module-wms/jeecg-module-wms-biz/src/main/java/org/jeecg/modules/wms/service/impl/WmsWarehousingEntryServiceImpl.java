@@ -719,12 +719,26 @@ public class WmsWarehousingEntryServiceImpl
             // 引擎按单 SKU 算落点，合并成整单方案后页面要靠 detailId 分组，
             // 否则多明细的单据无法知道每个落点属于哪一行，确认上架时也拼不出请求。
             plan.getLines().forEach(l -> l.setDetailId(detail.getId()));
+            if (plan.getLines().isEmpty() || plan.getRemainCount() > 0) {
+                // 没有合规落点（或只排上了一部分）：补一行「待人工指定库位」的占位，
+                // 页面才有行可编辑。不这样做整张表是空的，作业员连强制指定都无从下手。
+                plan.addLine(new WmsPutawayPlanLine()
+                        .setDetailId(detail.getId())
+                        .setCount(plan.getLines().isEmpty() ? remain : plan.getRemainCount())
+                        .setCapacity(0)
+                        .setNeedManual(true));
+            }
             if (merged == null) {
                 merged = plan;
             } else {
                 plan.getLines().forEach(merged::addLine);
                 merged.setRemainCount(merged.getRemainCount() + plan.getRemainCount());
                 merged.setNeedCount(merged.getNeedCount() + plan.getNeedCount());
+                // 整单层面的空因取第一条说明问题的（多明细时后面的原因通常雷同）
+                if (oConvertUtils.isEmpty(merged.getEmptyReason())) {
+                    merged.setEmptyReason(plan.getEmptyReason());
+                }
+                merged.setRejectedCount(merged.getRejectedCount() + plan.getRejectedCount());
             }
         }
         if (merged == null) {
@@ -802,14 +816,28 @@ public class WmsWarehousingEntryServiceImpl
                 throw new JeecgBootException(String.format(
                         "明细[%s]没有可用库位，需人工指定后上架", detail.getSkuId()));
             }
-            // 人工指定的库位照样要过第 1 层硬过滤（IN-03/IN-05/IN-06 全在这里）
-            WmsWarehouseAreaLoca loca = putawayService.checkTargetLoca(new WmsPutawayRequest()
+            WmsPutawayRequest putawayRequest = new WmsPutawayRequest()
                     .setWarehouseId(entry.getWarehouseId())
                     .setSkuId(detail.getSkuId())
                     .setBatchNumber(detail.getBatchNumber())
                     .setCount(count)
                     .setQualityStatus(QUALITY_GOOD)
-                    .setConsignorId(entry.getConsignorId()), targetLocaId);
+                    .setConsignorId(entry.getConsignorId());
+
+            // 人工强制指定：分区/温区/混放/容积都不再拦，只守跨仓与库位不可用两条，
+            // 但必须填偏离原因留痕——跳过业务约束这件事本身要被审计。
+            boolean forced = Boolean.TRUE.equals(line.getForce());
+            WmsWarehouseAreaLoca loca;
+            if (forced) {
+                if (oConvertUtils.isEmpty(line.getDeviateReason())) {
+                    throw new JeecgBootException(String.format(
+                            "明细[%s]强制指定库位必须填写强制上架原因", detail.getSkuId()));
+                }
+                loca = putawayService.checkForcedLoca(putawayRequest, targetLocaId);
+            } else {
+                // 人工指定的库位照样要过第 1 层硬过滤（IN-03/IN-05/IN-06 全在这里）
+                loca = putawayService.checkTargetLoca(putawayRequest, targetLocaId);
+            }
 
             WmsItemSku sku = skuMapper.selectById(detail.getSkuId());
             int unitVolume = unitVolume(sku);
@@ -844,8 +872,8 @@ public class WmsWarehousingEntryServiceImpl
                         .setUpdateTime(now));
             }
 
-            // 上架记录 + 偏离留痕
-            boolean deviate = recommendLocaId != null && !recommendLocaId.equals(targetLocaId);
+            // 上架记录 + 偏离留痕：强制指定无论是否命中推荐都算偏离，必须留原因
+            boolean deviate = forced || recommendLocaId == null || !recommendLocaId.equals(targetLocaId);
             boolean overflow = plan.getLines().stream()
                     .anyMatch(l -> l.getLocaId().equals(targetLocaId) && l.isOverflow());
             entryUpMapper.insert(new WmsWarehousingEntryUp()
@@ -861,7 +889,10 @@ public class WmsWarehousingEntryServiceImpl
                     .setStrategyUsed(plan.getStrategyUsed())
                     .setRecommendLocaId(recommendLocaId)
                     .setIsDeviate(deviate ? 1 : 0)
-                    .setDeviateReason(deviate ? resolveDeviateReason(line.getDeviateReason()) : null)
+                    .setDeviateReason(deviate
+                            ? (forced ? "[强制上架] " + line.getDeviateReason().trim()
+                                      : resolveDeviateReason(line.getDeviateReason()))
+                            : null)
                     .setIsOverflow(overflow ? 1 : 0)
                     .setDetailsSortId(sortRow == null ? null : sortRow.getId())
                     .setStatus(UP_DONE)
@@ -960,6 +991,10 @@ public class WmsWarehousingEntryServiceImpl
                     .setQualityStatus(QUALITY_GOOD)
                     .setConsignorId(entry.getConsignorId()));
             for (WmsPutawayPlanLine planLine : plan.getLines()) {
+                if (planLine.getLocaId() == null) {
+                    // 待人工指定的占位行没有落点，整单提交时必须由页面带上库位，这里跳过
+                    continue;
+                }
                 WmsPutawayConfirmForm.WmsPutawayLine line = new WmsPutawayConfirmForm.WmsPutawayLine();
                 line.setDetailId(detail.getId());
                 line.setCount(planLine.getCount());

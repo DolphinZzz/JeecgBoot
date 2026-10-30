@@ -45,5 +45,12 @@ public class WmsPutawayConfirmForm {
         /**偏离原因（实际库位与推荐不一致时填写）*/
         @Schema(description = "偏离原因")
         private String deviateReason;
+
+        /**
+         * 强制指定库位：为 true 时跳过分区/温区/混放/容积承重校验，只守跨仓与库位不可用，
+         * 且 deviateReason 必填。用于系统推荐为空（如本仓没有贵品冷库区）时的异常处置。
+         */
+        @Schema(description = "是否强制指定库位")
+        private Boolean force;
     }
 }

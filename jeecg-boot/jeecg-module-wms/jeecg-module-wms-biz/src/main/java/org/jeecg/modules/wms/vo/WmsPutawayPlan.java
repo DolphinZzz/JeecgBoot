@@ -34,6 +34,15 @@ public class WmsPutawayPlan {
     /**落点清单，按推荐优先级排列*/
     private List<WmsPutawayPlanLine> lines = new ArrayList<>();
 
+    /**
+     * 没有任何库位可用时的原因（取第一条被淘汰库位的拒绝理由）。
+     * 页面据此告诉作业员「为什么这个商品在本仓放不下」，而不是只给一句「无可用库位」。
+     */
+    private String emptyReason;
+
+    /**被硬过滤淘汰的库位数，配合 emptyReason 说明问题范围*/
+    private int rejectedCount;
+
     /**排上的数量合计*/
     public int plannedCount() {
         return lines.stream().mapToInt(WmsPutawayPlanLine::getCount).sum();

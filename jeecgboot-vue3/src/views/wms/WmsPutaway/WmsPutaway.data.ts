@@ -221,18 +221,19 @@ export const confirmColumns: JVxeColumn[] = [
   {
     title: '上架库位',
     key: 'locaId',
+    // 下拉选项由弹窗按本仓库位动态注入（按库区分组），不用表字典：
+    // 表字典会把所有仓库的库位混在一起，也看不出属于哪个库区
     type: JVxeTypes.select,
-    width: 180,
-    dictCode: 'wms_warehouse_area_loca,loca_code,id',
+    width: 220,
     allowSearch: true,
-    placeholder: '默认取推荐库位',
+    placeholder: '选择本仓库位',
     validateRules: [{ required: true, message: '请选择上架库位' }],
   },
   {
     title: '上架数量',
     key: 'count',
     type: JVxeTypes.inputNumber,
-    width: 120,
+    width: 110,
     props: { min: 1, precision: 0 },
     validateRules: [
       { required: true, message: '请填写上架数量' },
@@ -240,10 +241,17 @@ export const confirmColumns: JVxeColumn[] = [
     ],
   },
   {
-    title: '偏离原因',
+    title: '强制上架',
+    key: 'force',
+    type: JVxeTypes.checkbox,
+    width: 100,
+    defaultChecked: false,
+  },
+  {
+    title: '偏离/强制原因',
     key: 'deviateReason',
     type: JVxeTypes.input,
     width: 240,
-    placeholder: '改库位时建议填写',
+    placeholder: '改库位或强制指定时必填',
   },
 ];

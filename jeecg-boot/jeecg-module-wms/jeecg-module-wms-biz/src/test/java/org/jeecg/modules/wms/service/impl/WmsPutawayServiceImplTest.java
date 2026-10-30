@@ -12,6 +12,7 @@ import org.jeecg.modules.wms.mapper.WmsItemSpuMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaLocaMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaMapper;
 import org.jeecg.modules.wms.service.IWmsStrategyConfigService;
+import org.jeecg.modules.wms.vo.WmsPutawayLocaOption;
 import org.jeecg.modules.wms.vo.WmsPutawayPlan;
 import org.jeecg.modules.wms.vo.WmsPutawayRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -439,5 +440,81 @@ public class WmsPutawayServiceImplTest {
         assertNotNull(plan.getStrategyUsed());
         assertEquals(4, plan.getRemainCount());
         assertTrue(plan.getLines().isEmpty());
+        // 推荐为空时必须给出可读原因，页面才能告诉作业员为什么放不下
+        assertNotNull(plan.getEmptyReason(), "无落点时应给出原因");
+        assertTrue(plan.getEmptyReason().contains("库区"), plan.getEmptyReason());
+    }
+
+    @Test
+    void emptyReasonPointsAtZoneMismatch() {
+        // 贵品商品放在只有 GENERAL 区的仓库：分区不匹配，且贵品不允许兜底
+        stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL"));
+        when(locaMapper.selectList(any())).thenReturn(Collections.singletonList(loca(1, "L-01", 1, 100000, 100000)));
+        when(inventoryMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(skuMapper.selectById(SKU_ID)).thenReturn(sku);
+        when(spuMapper.selectById(1L)).thenReturn(spu("NORMAL", 1));
+
+        WmsPutawayPlan plan = putawayService.recommend(request(1));
+        assertTrue(plan.getLines().isEmpty());
+        assertEquals(1, plan.getRejectedCount());
+        assertTrue(plan.getEmptyReason().contains("分区"), plan.getEmptyReason());
+        assertTrue(plan.getEmptyReason().contains("贵品"), plan.getEmptyReason());
+    }
+
+    @Test
+    void locaOptionsListWholeWarehouseWithRejectReasons() {
+        WmsWarehouseArea storageArea = area(1, "STORAGE", "GENERAL", "NORMAL").setName("常温存储区A");
+        WmsWarehouseArea smallArea = area(2, "PICKING", "SMALL", "NORMAL").setName("拣货区B");
+        stubAreas(storageArea, smallArea);
+        WmsWarehouseAreaLoca storage = loca(1, "L-01", 1, 100000, 100000);
+        WmsWarehouseAreaLoca small = loca(2, "L-02", 2, 100000, 100000);
+        when(locaMapper.selectList(any())).thenReturn(Arrays.asList(storage, small));
+        when(inventoryMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(skuMapper.selectById(SKU_ID)).thenReturn(sku);
+        when(spuMapper.selectById(1L)).thenReturn(spu("COLD", 1));
+
+        List<WmsPutawayLocaOption> options = putawayService.listLocaOptions(request(1));
+
+        // 下拉列全仓库位（不按分区过滤），但每个选项都带自己的硬过滤结论
+        assertEquals(2, options.size());
+        WmsPutawayLocaOption first = options.stream()
+                .filter(o -> "L-01".equals(o.getLocaCode())).findFirst().orElseThrow();
+        assertEquals("常温存储区A", first.getGroup(), "下拉应按库区名称分组");
+        assertFalse(first.isAllowed(), "贵品冷库商品放在常温通用区应被标记为不可选");
+        assertNotNull(first.getRejectReason(), "不可选的库位必须给出原因");
+        assertEquals(Integer.valueOf(100000), first.getRemainVolume());
+    }
+
+    @Test
+    void forcedLocaRejectsCrossWarehouse() {
+        WmsWarehouseAreaLoca other = loca(9, "X-01", 1, 100000, 100000).setWarehouseId(99);
+        when(locaMapper.selectById(9)).thenReturn(other);
+
+        JeecgBootException ex = assertThrows(JeecgBootException.class,
+                () -> putawayService.checkForcedLoca(request(1), 9));
+        assertTrue(ex.getMessage().contains("不属于本仓库"), ex.getMessage());
+    }
+
+    @Test
+    void forcedLocaRejectsDisabledAndStocktakingLoca() {
+        when(locaMapper.selectById(3)).thenReturn(loca(3, "L-03", 1, 1, 1).setLocaStatus(4));
+        JeecgBootException disabled = assertThrows(JeecgBootException.class,
+                () -> putawayService.checkForcedLoca(request(1), 3));
+        assertTrue(disabled.getMessage().contains("已禁用"), disabled.getMessage());
+
+        when(locaMapper.selectById(4)).thenReturn(loca(4, "L-04", 1, 1, 1).setLocaStatus(3));
+        JeecgBootException locked = assertThrows(JeecgBootException.class,
+                () -> putawayService.checkForcedLoca(request(1), 4));
+        assertTrue(locked.getMessage().contains("盘点锁定"), locked.getMessage());
+    }
+
+    @Test
+    void forcedLocaAllowsZoneAndStorageConditionMismatch() {
+        // 强制上架的意义就在这里：分区/温区不匹配也能落库，前提是调用方记录原因
+        WmsWarehouseAreaLoca loca = loca(5, "L-05", 1, 100000, 100000);
+        when(locaMapper.selectById(5)).thenReturn(loca);
+
+        WmsWarehouseAreaLoca result = putawayService.checkForcedLoca(request(1), 5);
+        assertEquals(Integer.valueOf(5), result.getId());
     }
 }

@@ -484,6 +484,62 @@ public class WmsWarehousingEntryServiceImplTest {
         verify(putawayService).recommend(ArgumentMatchers.argThat(r -> r.getCount() == 12));
     }
 
+    /**
+     * 推荐为空时必须仍给出一行「待人工指定」的占位。
+     * 之前整单返回空 lines，页面上表格一行都没有，作业员连强制指定库位都无从下手。
+     */
+    @Test
+    void recommendWithoutCandidatesEmitsManualLine() {
+        entry.setStatus(WmsEntryStatusEnum.PENDING_PUTAWAY.getCode());
+        when(entryMapper.selectById(ENTRY_ID)).thenReturn(entry);
+        when(detailsMapper.selectList(any())).thenReturn(Collections.singletonList(
+                detail(1L, 1).setReceivedCount(1)
+                        .setQcStatus(WmsQcStatusEnum.PASS.getCode())
+                        .setQcPassCount(1).setQcFailCount(0)));
+        when(entryUpMapper.selectList(any())).thenReturn(Collections.emptyList());
+        when(putawayService.recommend(any())).thenReturn(new org.jeecg.modules.wms.vo.WmsPutawayPlan()
+                .setStrategyUsed("ABC").setZoneType("VALUABLE").setNeedCount(1).setRemainCount(1)
+                .setEmptyReason("商品分区为 贵品，本仓 13 个库位均不满足，主要原因：分区不匹配"));
+
+        org.jeecg.modules.wms.vo.WmsPutawayPlan plan = entryService.recommendPutaway(ENTRY_ID);
+
+        assertEquals(1, plan.getLines().size(), "没有合规落点也要给出一行供人工指定");
+        org.jeecg.modules.wms.vo.WmsPutawayPlanLine line = plan.getLines().get(0);
+        assertTrue(line.isNeedManual());
+        assertNull(line.getLocaId(), "占位行不带库位，必须由作业员自己选");
+        assertEquals(1, line.getCount());
+        assertEquals(1L, line.getDetailId());
+        assertEquals("商品分区为 贵品，本仓 13 个库位均不满足，主要原因：分区不匹配", plan.getEmptyReason());
+    }
+
+    /** 强制指定库位但没填原因：必须拦住，审计要能解释为什么绕过了分区/温区 */
+    @Test
+    void forcedPutawayRequiresReason() {
+        entry.setStatus(WmsEntryStatusEnum.PENDING_PUTAWAY.getCode());
+        when(entryMapper.selectOne(any(), anyBoolean())).thenReturn(entry);
+        when(detailsMapper.selectList(any())).thenReturn(Collections.singletonList(
+                detail(1L, 1).setReceivedCount(1)
+                        .setQcStatus(WmsQcStatusEnum.PASS.getCode())
+                        .setQcPassCount(1).setQcFailCount(0)));
+        when(putawayService.recommend(any())).thenReturn(new org.jeecg.modules.wms.vo.WmsPutawayPlan()
+                .setStrategyUsed("ABC").setZoneType("VALUABLE").setNeedCount(1).setRemainCount(1));
+
+        org.jeecg.modules.wms.vo.WmsPutawayConfirmForm form = new org.jeecg.modules.wms.vo.WmsPutawayConfirmForm();
+        form.setId(ENTRY_ID);
+        org.jeecg.modules.wms.vo.WmsPutawayConfirmForm.WmsPutawayLine line =
+                new org.jeecg.modules.wms.vo.WmsPutawayConfirmForm.WmsPutawayLine();
+        line.setDetailId(1L);
+        line.setCount(1);
+        line.setLocaId(9);
+        line.setForce(true);
+        form.setDetails(Collections.singletonList(line));
+
+        JeecgBootException ex = assertThrows(JeecgBootException.class,
+                () -> entryService.confirmPutaway(form));
+        assertTrue(ex.getMessage().contains("强制上架原因"), ex.getMessage());
+        verify(putawayService, never()).checkForcedLoca(any(), any());
+    }
+
     @Test
     void cancelOnlyAllowedWhenArriving() {
         entry.setStatus(WmsEntryStatusEnum.RECEIVING.getCode());

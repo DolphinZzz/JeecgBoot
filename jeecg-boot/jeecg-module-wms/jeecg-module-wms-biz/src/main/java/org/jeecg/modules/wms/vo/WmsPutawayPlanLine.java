@@ -43,4 +43,10 @@ public class WmsPutawayPlanLine {
 
     /**是否已存放同 SKU / 同批次（同品集中）*/
     private boolean sameSku;
+
+    /**
+     * 是否需要人工指定库位：引擎找不到任何合规落点（或只排上了一部分）时，
+     * 为剩余量补的一行占位，此时 locaId/locaCode 为空，页面上必须由作业员选库位。
+     */
+    private boolean needManual;
 }
