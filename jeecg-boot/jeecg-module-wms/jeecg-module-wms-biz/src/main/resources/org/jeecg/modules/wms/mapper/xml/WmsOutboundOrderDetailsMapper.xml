@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsOutboundOrderDetailsMapper">
+
+    <select id="selectDetailViewsByOrderId" resultType="org.jeecg.modules.wms.vo.WmsOutboundDetailView">
+        SELECT
+            d.id, d.outbound_order_id, d.sku_id, d.consignor_id,
+            d.batch_number, d.expire_date, d.out_count, d.allocated_count,
+            d.picked_count, d.review_count, d.review_status, d.shortage_handle,
+            d.target_warehouse_id, d.target_warehouse_area_id, d.target_warehouse_area_loca_id,
+            d.pick_status, d.pick_emp_id, d.pick_time,
+            k.code AS sku_code,
+            k.sku_name AS sku_name,
+            k.bar_code AS bar_code,
+            k.is_sn_managed AS is_sn_managed,
+            s.name AS spu_name,
+            s.storage_condition AS storage_condition,
+            s.near_expire_days AS near_expire_days,
+            c.consignor_name AS consignor_name,
+            a.name AS area_name,
+            l.loca_code AS loca_code
+        FROM wms_outbound_order_details d
+        LEFT JOIN wms_item_sku k ON k.id = d.sku_id
+        LEFT JOIN wms_item_spu s ON s.id = k.spu_id
+        LEFT JOIN wms_consignor c ON c.id = d.consignor_id
+        LEFT JOIN wms_warehouse_area a ON a.id = d.target_warehouse_area_id
+        LEFT JOIN wms_warehouse_area_loca l ON l.id = d.target_warehouse_area_loca_id
+        WHERE d.outbound_order_id = #{outboundOrderId}
+          AND d.is_del = 1
+        ORDER BY d.id ASC
+    </select>
+
+</mapper>

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsOutboundOrderMapper">
+
+    <select id="selectOutboundPage" resultType="org.jeecg.modules.wms.vo.WmsOutboundPage">
+        SELECT
+            o.id, o.outbound_code, o.outbound_type, o.pick_mode, o.wave_id,
+            o.erp_order_no, o.mes_work_order_no, o.customer_id, o.warehouse_id, o.consignor_id,
+            o.status, o.total_count, o.total_weight, o.total_volume, o.price,
+            o.logistics_company_id, o.logistics_number,
+            o.create_time, o.create_by,
+            w.name AS warehouse_name,
+            w.warehouse_type AS warehouse_type,
+            c.consignor_name AS consignor_name,
+            cu.customer_name AS customer_name,
+            lc.company_name AS logistics_company_name,
+            wv.wave_code AS wave_code,
+            (SELECT COUNT(*) FROM wms_outbound_order_details d
+              WHERE d.outbound_order_id = o.id AND d.is_del = 1) AS detail_rows,
+            (SELECT IFNULL(SUM(d.allocated_count), 0) FROM wms_outbound_order_details d
+              WHERE d.outbound_order_id = o.id AND d.is_del = 1) AS allocated_total,
+            (SELECT IFNULL(SUM(d.picked_count), 0) FROM wms_outbound_order_details d
+              WHERE d.outbound_order_id = o.id AND d.is_del = 1) AS picked_total,
+            (SELECT IFNULL(SUM(d.review_count), 0) FROM wms_outbound_order_details d
+              WHERE d.outbound_order_id = o.id AND d.is_del = 1) AS review_total
+        FROM wms_outbound_order o
+        LEFT JOIN wms_warehouse w ON w.id = o.warehouse_id
+        LEFT JOIN wms_consignor c ON c.id = o.consignor_id
+        LEFT JOIN wms_customer cu ON cu.id = o.customer_id
+        LEFT JOIN wms_logistics_company lc ON lc.id = o.logistics_company_id
+        LEFT JOIN wms_wave_order wv ON wv.id = o.wave_id
+        WHERE o.is_del = 1
+        <if test="q.outboundCode != null and q.outboundCode != ''">
+            AND o.outbound_code LIKE CONCAT('%', #{q.outboundCode}, '%')
+        </if>
+        <if test="q.outboundType != null">
+            AND o.outbound_type = #{q.outboundType}
+        </if>
+        <if test="q.pickMode != null">
+            AND o.pick_mode = #{q.pickMode}
+        </if>
+        <if test="q.status != null">
+            AND o.status = #{q.status}
+        </if>
+        <if test="q.warehouseId != null">
+            AND o.warehouse_id = #{q.warehouseId}
+        </if>
+        <if test="q.consignorId != null">
+            AND o.consignor_id = #{q.consignorId}
+        </if>
+        <if test="q.customerId != null">
+            AND o.customer_id = #{q.customerId}
+        </if>
+        <if test="q.waveId != null">
+            AND o.wave_id = #{q.waveId}
+        </if>
+        <if test="q.erpOrderNo != null and q.erpOrderNo != ''">
+            AND o.erp_order_no LIKE CONCAT('%', #{q.erpOrderNo}, '%')
+        </if>
+        <if test="q.mesWorkOrderNo != null and q.mesWorkOrderNo != ''">
+            AND o.mes_work_order_no LIKE CONCAT('%', #{q.mesWorkOrderNo}, '%')
+        </if>
+        <if test="q.logisticsNumber != null and q.logisticsNumber != ''">
+            AND o.logistics_number LIKE CONCAT('%', #{q.logisticsNumber}, '%')
+        </if>
+        ORDER BY o.id DESC
+    </select>
+
+    <select id="selectByCode" resultType="org.jeecg.modules.wms.entity.WmsOutboundOrder">
+        SELECT * FROM wms_outbound_order
+        WHERE outbound_code = #{outboundCode} AND is_del = 1
+        LIMIT 1
+    </select>
+
+</mapper>

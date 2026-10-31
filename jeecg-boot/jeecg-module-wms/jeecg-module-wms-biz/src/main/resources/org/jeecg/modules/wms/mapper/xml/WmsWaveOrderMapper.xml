@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsWaveOrderMapper">
+
+    <select id="selectWavePage" resultType="org.jeecg.modules.wms.vo.WmsWavePage">
+        SELECT
+            v.id, v.wave_code, v.warehouse_id, v.pick_mode, v.logistics_company_id,
+            v.storage_condition, v.order_count, v.sku_count, v.total_count,
+            v.status, v.emp_id, v.create_time, v.create_by,
+            w.name AS warehouse_name,
+            lc.company_name AS logistics_company_name
+        FROM wms_wave_order v
+        LEFT JOIN wms_warehouse w ON w.id = v.warehouse_id
+        LEFT JOIN wms_logistics_company lc ON lc.id = v.logistics_company_id
+        WHERE v.is_del = 1
+        <if test="q.waveCode != null and q.waveCode != ''">
+            AND v.wave_code LIKE CONCAT('%', #{q.waveCode}, '%')
+        </if>
+        <if test="q.warehouseId != null">
+            AND v.warehouse_id = #{q.warehouseId}
+        </if>
+        <if test="q.pickMode != null">
+            AND v.pick_mode = #{q.pickMode}
+        </if>
+        <if test="q.logisticsCompanyId != null">
+            AND v.logistics_company_id = #{q.logisticsCompanyId}
+        </if>
+        <if test="q.storageCondition != null and q.storageCondition != ''">
+            AND v.storage_condition = #{q.storageCondition}
+        </if>
+        <if test="q.status != null">
+            AND v.status = #{q.status}
+        </if>
+        ORDER BY v.id DESC
+    </select>
+
+    <select id="selectWavePickItems" resultType="org.jeecg.modules.wms.vo.WmsWaveDetailView$WmsWavePickItem">
+        SELECT
+            d.sku_id,
+            k.code AS sku_code,
+            k.sku_name AS sku_name,
+            k.bar_code AS bar_code,
+            d.batch_number,
+            d.target_warehouse_area_loca_id AS warehouse_area_loca_id,
+            l.loca_code,
+            SUM(d.allocated_count) AS total_pick_count
+        FROM wms_outbound_order o
+        JOIN wms_outbound_order_details d ON d.outbound_order_id = o.id AND d.is_del = 1
+        LEFT JOIN wms_item_sku k ON k.id = d.sku_id
+        LEFT JOIN wms_warehouse_area_loca l ON l.id = d.target_warehouse_area_loca_id
+        WHERE o.wave_id = #{waveId}
+          AND o.is_del = 1
+        GROUP BY d.sku_id, k.code, k.sku_name, k.bar_code, d.batch_number, d.target_warehouse_area_loca_id, l.loca_code
+        ORDER BY l.loca_code ASC, d.sku_id ASC
+    </select>
+
+    <select id="selectByCode" resultType="org.jeecg.modules.wms.entity.WmsWaveOrder">
+        SELECT * FROM wms_wave_order
+        WHERE wave_code = #{waveCode} AND is_del = 1
+        LIMIT 1
+    </select>
+
+</mapper>
