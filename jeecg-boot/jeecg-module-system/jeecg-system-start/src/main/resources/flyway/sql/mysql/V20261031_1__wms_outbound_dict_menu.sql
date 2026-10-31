@@ -326,3 +326,102 @@ FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM sys_permission WHERE id = '17935500000
 INSERT INTO sys_permission(id, parent_id, name, url, component, is_route, component_name, redirect, menu_type, perms, perms_type, sort_no, always_show, icon, is_leaf, keep_alive, hidden, hide_tab, description, create_by, create_time, update_by, update_time, del_flag, rule_flag, status, internal_or_external)
 SELECT '179355000000002', '179355000000001', '发货确认', NULL, NULL, 0, NULL, NULL, 2, 'wms:wms_outbound_order:shipConfirm', '1', NULL, 0, NULL, 1, 0, 0, 0, NULL, 'admin', NOW(), NULL, NULL, 0, 0, '1', 0
 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM sys_permission WHERE id = '179355000000002');
+
+-- ========== 3.6 承运商管理（基础数据） ==========
+INSERT INTO sys_permission(id, parent_id, name, url, component, component_name, redirect, menu_type, perms, perms_type, sort_no, always_show, icon, is_route, is_leaf, keep_alive, hidden, hide_tab, description, status, del_flag, rule_flag, create_by, create_time, update_by, update_time, internal_or_external)
+SELECT '179356000000001', '179307527735921', '承运商管理', '/wms/base/wmsLogisticsList', 'wms/WmsLogistics/WmsLogisticsList', 'wms-wmsLogistics', NULL, 1, NULL, '0', 7.00, 0, 'ant-design:car-outlined', 1, 0, 0, 0, 0, NULL, '1', 0, 0, 'admin', NOW(), NULL, NULL, 0
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM sys_permission WHERE id = '179356000000001');
+
+INSERT INTO sys_permission(id, parent_id, name, url, component, is_route, component_name, redirect, menu_type, perms, perms_type, sort_no, always_show, icon, is_leaf, keep_alive, hidden, hide_tab, description, create_by, create_time, update_by, update_time, del_flag, rule_flag, status, internal_or_external)
+SELECT '179356000000002', '179356000000001', '添加承运商', NULL, NULL, 0, NULL, NULL, 2, 'wms:logistics:add', '1', NULL, 0, NULL, 1, 0, 0, 0, NULL, 'admin', NOW(), NULL, NULL, 0, 0, '1', 0
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM sys_permission WHERE id = '179356000000002');
+
+INSERT INTO sys_permission(id, parent_id, name, url, component, is_route, component_name, redirect, menu_type, perms, perms_type, sort_no, always_show, icon, is_leaf, keep_alive, hidden, hide_tab, description, create_by, create_time, update_by, update_time, del_flag, rule_flag, status, internal_or_external)
+SELECT '179356000000003', '179356000000001', '编辑承运商', NULL, NULL, 0, NULL, NULL, 2, 'wms:logistics:edit', '1', NULL, 0, NULL, 1, 0, 0, 0, NULL, 'admin', NOW(), NULL, NULL, 0, 0, '1', 0
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM sys_permission WHERE id = '179356000000003');
+
+INSERT INTO sys_permission(id, parent_id, name, url, component, is_route, component_name, redirect, menu_type, perms, perms_type, sort_no, always_show, icon, is_leaf, keep_alive, hidden, hide_tab, description, create_by, create_time, update_by, update_time, del_flag, rule_flag, status, internal_or_external)
+SELECT '179356000000004', '179356000000001', '删除承运商', NULL, NULL, 0, NULL, NULL, 2, 'wms:logistics:delete', '1', NULL, 0, NULL, 1, 0, 0, 0, NULL, 'admin', NOW(), NULL, NULL, 0, 0, '1', 0
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM sys_permission WHERE id = '179356000000004');
+
+-- ----------------------------------------------------------------
+-- 4. 表字典白名单
+-- ----------------------------------------------------------------
+INSERT INTO sys_table_white_list(id, table_name, field_name, status, create_by, create_time)
+SELECT '179350000000010', 'wms_logistics_company', 'id,company_name,is_del', '1', 'admin', NOW()
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM sys_table_white_list WHERE table_name = 'wms_logistics_company');
+
+-- ----------------------------------------------------------------
+-- 5. 角色授权（管理员与相关角色）
+-- ----------------------------------------------------------------
+-- 管理员角色 f6817f48af4fb3af11b9e8bf182f618b
+INSERT INTO sys_role_permission (id, role_id, permission_id, operate_date, operate_ip)
+SELECT REPLACE(CONCAT('17945', SUBSTRING(p.id, 6)), '-', ''), 'f6817f48af4fb3af11b9e8bf182f618b', p.id, NOW(), '127.0.0.1'
+FROM sys_permission p
+WHERE p.id IN (
+    '179350000000000',
+    '179351000000001','179351000000002','179351000000003','179351000000004','179351000000005',
+    '179352000000001','179352000000002','179352000000003','179352000000004','179352000000005',
+    '179353000000001','179353000000002',
+    '179354000000001','179354000000002','179354000000003',
+    '179355000000001','179355000000002',
+    '179356000000001','179356000000002','179356000000003','179356000000004'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM sys_role_permission rp
+    WHERE rp.role_id = 'f6817f48af4fb3af11b9e8bf182f618b' AND rp.permission_id = p.id
+);
+
+-- Vue3角色 1501570619841810433
+INSERT INTO sys_role_permission (id, role_id, permission_id, operate_date, operate_ip)
+SELECT REPLACE(CONCAT('17946', SUBSTRING(p.id, 6)), '-', ''), '1501570619841810433', p.id, NOW(), '127.0.0.1'
+FROM sys_permission p
+WHERE p.id IN (
+    '179350000000000',
+    '179351000000001','179351000000002','179351000000003','179351000000004','179351000000005',
+    '179352000000001','179352000000002','179352000000003','179352000000004','179352000000005',
+    '179353000000001','179353000000002',
+    '179354000000001','179354000000002','179354000000003',
+    '179355000000001','179355000000002',
+    '179356000000001','179356000000002','179356000000003','179356000000004'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM sys_role_permission rp
+    WHERE rp.role_id = '1501570619841810433' AND rp.permission_id = p.id
+);
+
+-- 仓库管理员角色 (sh_wh_admin, gz_wh_admin)
+INSERT INTO sys_role_permission (id, role_id, permission_id, operate_date, operate_ip)
+SELECT REPLACE(CONCAT('17947', SUBSTRING(p.id, 6)), '-', ''), '2115683251967868930', p.id, NOW(), '127.0.0.1'
+FROM sys_permission p
+WHERE p.id IN (
+    '179350000000000',
+    '179351000000001','179351000000002','179351000000003','179351000000004','179351000000005',
+    '179352000000001','179352000000002','179352000000003','179352000000004','179352000000005',
+    '179353000000001','179353000000002',
+    '179354000000001','179354000000002','179354000000003',
+    '179355000000001','179355000000002',
+    '179356000000001','179356000000002','179356000000003','179356000000004'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM sys_role_permission rp
+    WHERE rp.role_id = '2115683251967868930' AND rp.permission_id = p.id
+);
+
+INSERT INTO sys_role_permission (id, role_id, permission_id, operate_date, operate_ip)
+SELECT REPLACE(CONCAT('17948', SUBSTRING(p.id, 6)), '-', ''), '2115685628582150146', p.id, NOW(), '127.0.0.1'
+FROM sys_permission p
+WHERE p.id IN (
+    '179350000000000',
+    '179351000000001','179351000000002','179351000000003','179351000000004','179351000000005',
+    '179352000000001','179352000000002','179352000000003','179352000000004','179352000000005',
+    '179353000000001','179353000000002',
+    '179354000000001','179354000000002','179354000000003',
+    '179355000000001','179355000000002',
+    '179356000000001','179356000000002','179356000000003','179356000000004'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM sys_role_permission rp
+    WHERE rp.role_id = '2115685628582150146' AND rp.permission_id = p.id
+);
+
