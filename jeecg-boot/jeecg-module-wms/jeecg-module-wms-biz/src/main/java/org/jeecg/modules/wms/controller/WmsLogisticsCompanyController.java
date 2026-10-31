@@ -13,6 +13,7 @@ import org.jeecg.modules.wms.service.IWmsLogisticsCompanyService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
@@ -116,5 +117,31 @@ public class WmsLogisticsCompanyController {
         company.setUpdateTime(new Date());
         logisticsCompanyService.updateById(company);
         return Result.OK("删除成功");
+    }
+
+    /**
+     * 批量软删除物流公司
+     */
+    @AutoLog(value = "物流公司-批量删除")
+    @Operation(summary = "物流公司-批量删除")
+    @DeleteMapping(value = "/deleteBatch")
+    public Result<String> deleteBatch(@RequestParam(name = "ids") String ids) {
+        if (ids == null || ids.trim().isEmpty()) {
+            return Result.error("参数缺失");
+        }
+        List<String> idList = Arrays.asList(ids.split(","));
+        for (String idStr : idList) {
+            try {
+                Integer id = Integer.parseInt(idStr.trim());
+                WmsLogisticsCompany company = logisticsCompanyService.getById(id);
+                if (company != null) {
+                    company.setIsDel(2);
+                    company.setUpdateTime(new Date());
+                    logisticsCompanyService.updateById(company);
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return Result.OK("批量删除成功");
     }
 }
