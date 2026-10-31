@@ -13,6 +13,7 @@
     <WmsEntryCreateModal @register="registerCreateModal" @success="handleSuccess" />
     <WmsEntryReceiveModal @register="registerReceiveModal" @success="handleSuccess" />
     <WmsPutawayConfirmModal @register="registerPutawayModal" @success="handleSuccess" />
+    <WmsQualityCheckReturnModal @register="registerReturnModal" @success="handleSuccess" />
 
     <!-- 明细 / 上架记录抽屉 -->
     <a-drawer v-model:visible="detailVisible" :title="detailTitle" width="1080" destroyOnClose>
@@ -26,9 +27,15 @@
         <a-descriptions-item label="计划数量">{{ current.totalCount }}</a-descriptions-item>
         <a-descriptions-item label="实收合计">{{ current.receivedTotal ?? 0 }}</a-descriptions-item>
         <a-descriptions-item label="已上架合计">{{ current.putawayTotal ?? 0 }}</a-descriptions-item>
+        <a-descriptions-item label="质检合格合计">
+          <span style="color: #52c41a; font-weight: 500">{{ current.qcPassTotal ?? 0 }}</span>
+        </a-descriptions-item>
+        <a-descriptions-item label="质检不合格合计">
+          <span style="color: #f5222d; font-weight: 500">{{ current.qcFailTotal ?? 0 }}</span>
+        </a-descriptions-item>
         <a-descriptions-item label="MES工单号">{{ current.mesWorkOrderNo || '-' }}</a-descriptions-item>
         <a-descriptions-item label="ERP采购单号">{{ current.erpPoNo || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="创建时间">{{ current.createTime || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="创建时间" :span="2">{{ current.createTime || '-' }}</a-descriptions-item>
       </a-descriptions>
 
       <a-tabs v-model:activeKey="detailTab">
@@ -75,14 +82,17 @@
   import WmsEntryCreateModal from './components/WmsEntryCreateModal.vue';
   import WmsEntryReceiveModal from './components/WmsEntryReceiveModal.vue';
   import WmsPutawayConfirmModal from '../WmsPutaway/components/WmsPutawayConfirmModal.vue';
+  import WmsQualityCheckReturnModal from '../WmsQualityCheck/components/WmsQualityCheckReturnModal.vue';
   import { columns, searchFormSchema, detailViewColumns, putawayRecordColumns } from './WmsEntry.data';
   import { list, cancelEntry, submitToQc, auditOverReceive, queryDetails, queryPutawayRecords } from './WmsEntry.api';
+  import { list as listQc } from '../WmsQualityCheck/WmsQualityCheck.api';
 
   const { createMessage } = useMessage();
   const queryParam = reactive<any>({});
   const [registerCreateModal, { openModal: openCreateModal }] = useModal();
   const [registerReceiveModal, { openModal: openReceiveModal }] = useModal();
   const [registerPutawayModal, { openModal: openPutawayModal }] = useModal();
+  const [registerReturnModal, { openModal: openReturnModal }] = useModal();
 
   const { tableContext } = useListPage({
     tableProps: {
@@ -128,7 +138,26 @@
   const current = ref<Recordable>({});
   // 抽屉里的表格挂载时还没有单据ID，关掉自动加载，等打开抽屉时再手动 reload
   const [registerDetailTable, { reload: reloadDetails }] = useTable({
-    api: (params) => queryDetails(current.value.id),
+    api: async (params) => {
+      if (!current.value.id) return [];
+      const res: any = await queryDetails(current.value.id);
+      const list = Array.isArray(res) ? res : res?.records || [];
+      if (list.length > 0) {
+        // 根据明细动态同步抽屉顶部的实收合计与已上架合计，避免列表缓存延迟
+        const putawaySum = list.reduce((sum, d) => sum + Number(d.putawayCount ?? 0), 0);
+        const receivedSum = list.reduce((sum, d) => sum + Number(d.receivedCount ?? 0), 0);
+        const qcPassSum = list.reduce((sum, d) => sum + Number(d.qcPassCount ?? 0), 0);
+        const qcFailSum = list.reduce((sum, d) => sum + Number(d.qcFailCount ?? 0), 0);
+        current.value = {
+          ...current.value,
+          putawayTotal: putawaySum,
+          receivedTotal: receivedSum,
+          qcPassTotal: qcPassSum,
+          qcFailTotal: qcFailSum,
+        };
+      }
+      return list;
+    },
     columns: detailViewColumns,
     showIndexColumn: false,
     showTableSetting: false,
@@ -137,7 +166,11 @@
     immediate: false,
   });
   const [registerRecordTable, { reload: reloadRecords }] = useTable({
-    api: (params) => queryPutawayRecords(current.value.id),
+    api: async (params) => {
+      if (!current.value.id) return [];
+      const res: any = await queryPutawayRecords(current.value.id);
+      return Array.isArray(res) ? res : res?.records || [];
+    },
     columns: putawayRecordColumns,
     showIndexColumn: false,
     showTableSetting: false,
@@ -225,6 +258,24 @@
     }
   }
 
+  async function handleQcReturnFromEntry(record) {
+    try {
+      const res: any = await listQc({ entryCode: record.entryCode });
+      const records = res?.records || res || [];
+      let target = records.find((r: any) => Number(r.failCount ?? 0) > 0 && Number(r.returnStatus ?? 0) === 1);
+      if (!target) {
+        target = records.find((r: any) => Number(r.failCount ?? 0) > 0);
+      }
+      if (target) {
+        openReturnModal(true, { record: target });
+      } else {
+        createMessage.info('未找到该单对应的不合格品质检记录，请前往「质检单」页面查看');
+      }
+    } catch (e: any) {
+      createMessage.error(e?.message || '获取质检退货数据失败');
+    }
+  }
+
   function getTableAction(record) {
     const actions: any[] = [{ label: '明细', onClick: handleDetail.bind(null, record) }];
     const status = Number(record.status);
@@ -236,13 +287,38 @@
         onClick: handleReceive.bind(null, record),
       });
     }
-    // 质检完成（已出结论）才能上架
+    // 质检完成（40）或上架中（50）
     if (status === 40 || status === 50) {
-      actions.unshift({
-        label: '上架作业',
-        auth: 'wms:wms_warehousing_entry_up:confirm',
-        onClick: handlePutaway.bind(null, record),
-      });
+      const putawayTotal = Number(record.putawayTotal ?? 0);
+      const qcPassTotal = record.qcPassTotal !== undefined && record.qcPassTotal !== null ? Number(record.qcPassTotal) : undefined;
+      const pendingReturn = Number(record.pendingReturnRows ?? 0);
+
+      // 判断是否还有未上架的合格品
+      const hasRemainGood = qcPassTotal === undefined
+        ? true
+        : qcPassTotal > putawayTotal;
+
+      if (hasRemainGood) {
+        actions.unshift({
+          label: '上架作业',
+          auth: 'wms:wms_warehousing_entry_up:confirm',
+          onClick: handlePutaway.bind(null, record),
+        });
+      } else if (pendingReturn > 0) {
+        // 合格品已全部上架（或无合格品），但有待处置的退货不合格品：直接展示【退货处置】
+        actions.unshift({
+          label: '退货处置',
+          color: 'warning',
+          auth: 'wms:wms_quality_check:return',
+          onClick: handleQcReturnFromEntry.bind(null, record),
+        });
+      } else if (qcPassTotal !== undefined && qcPassTotal > 0 && putawayTotal >= qcPassTotal) {
+        // 合格品已全部上架完毕
+        actions.unshift({
+          label: '已全部上架',
+          disabled: true,
+        });
+      }
     }
     return actions;
   }
@@ -259,6 +335,12 @@
           confirm: handleSubmitToQc.bind(null, record),
           placement: 'topLeft',
         },
+      },
+      {
+        label: '退货处置',
+        disabled: !(Number(record.qcFailTotal ?? 0) > 0 || Number(record.pendingReturnRows ?? 0) > 0),
+        auth: 'wms:wms_quality_check:return',
+        onClick: handleQcReturnFromEntry.bind(null, record),
       },
       {
         label: '超收放行',

@@ -34,4 +34,13 @@ public class WmsEntryPage extends WmsWarehousingEntry {
 
     /**已上架数量合计*/
     private Integer putawayTotal;
+
+    /**明细质检合格数量合计*/
+    private Integer qcPassTotal;
+
+    /**明细质检不合格数量合计*/
+    private Integer qcFailTotal;
+
+    /**待退货安置的质检单行数（存在不合格品且退货状态为1待处理）*/
+    private Integer pendingReturnRows;
 }

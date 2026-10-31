@@ -1,5 +1,6 @@
 package org.jeecg.modules.wms.controller;
 
+import java.util.List;
 import java.util.Map;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -10,8 +11,11 @@ import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.jeecg.common.api.vo.Result;
 import org.jeecg.common.aspect.annotation.AutoLog;
 import org.jeecg.modules.wms.entity.WmsQualityCheck;
+import org.jeecg.modules.wms.entity.WmsWarehouseAreaLoca;
 import org.jeecg.modules.wms.mapper.WmsQualityCheckMapper;
 import org.jeecg.modules.wms.service.IWmsWarehousingEntryService;
+import org.jeecg.modules.wms.vo.WmsQcReturnForm;
+import org.jeecg.modules.wms.vo.WmsQcShipReturnForm;
 import org.jeecg.modules.wms.vo.WmsQcSubmitForm;
 import org.jeecg.modules.wms.vo.WmsQualityCheckPage;
 import org.jeecg.modules.wms.vo.WmsQualityCheckQuery;
@@ -71,5 +75,39 @@ public class WmsQualityCheckController {
     public Result<Map<String, Object>> submit(@RequestBody WmsQcSubmitForm form) {
         Map<String, Object> result = entryService.submitQc(form);
         return Result.OK((String) result.getOrDefault("message", "质检已提交"), result);
+    }
+
+    /**
+     * 查询当前仓库退货不良区（RETURN）的货架库位列表
+     */
+    @Operation(summary = "质检单-退货不良库位选项")
+    @GetMapping(value = "/returnLocaOptions")
+    public Result<List<WmsWarehouseAreaLoca>> returnLocaOptions(@RequestParam(name = "qcId", required = false) Long qcId,
+                                                                @RequestParam(name = "warehouseId", required = false) Integer warehouseId) {
+        return Result.OK(entryService.listReturnLocaOptions(qcId, warehouseId));
+    }
+
+    /**
+     * 不合格品退货处理（放置退货不良区货架，并记录联系供应商处置）
+     */
+    @AutoLog(value = "质检单-退货处置")
+    @Operation(summary = "质检单-退货处置")
+    @RequiresPermissions("wms:wms_quality_check:return")
+    @PostMapping(value = "/handleReturn")
+    public Result<Map<String, Object>> handleReturn(@RequestBody WmsQcReturnForm form) {
+        Map<String, Object> result = entryService.handleQcReturn(form);
+        return Result.OK((String) result.getOrDefault("message", "退货处置完成"), result);
+    }
+
+    /**
+     * 确认退还供应商出库
+     */
+    @AutoLog(value = "质检单-确认退还供应商")
+    @Operation(summary = "质检单-确认退还供应商")
+    @RequiresPermissions("wms:wms_quality_check:shipReturn")
+    @PostMapping(value = "/shipReturn")
+    public Result<Map<String, Object>> shipReturn(@RequestBody WmsQcShipReturnForm form) {
+        Map<String, Object> result = entryService.shipQcReturn(form);
+        return Result.OK((String) result.getOrDefault("message", "已确认退还供应商"), result);
     }
 }

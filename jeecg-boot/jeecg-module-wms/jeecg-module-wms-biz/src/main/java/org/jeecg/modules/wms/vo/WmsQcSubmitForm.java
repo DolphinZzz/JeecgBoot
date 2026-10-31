@@ -26,6 +26,14 @@ public class WmsQcSubmitForm {
     @Schema(description = "不合格原因")
     private String failReason;
 
+    /**退货放置库位ID（有不合格品时指定，落退货不良区）*/
+    @Schema(description = "退货放置库位ID")
+    private Integer returnLocaId;
+
+    /**退货联系处置备注/说明*/
+    @Schema(description = "退货联系处置备注")
+    private String returnRemark;
+
     /**明细结果，为空则按 qcType 自动判定（免检全合格、其余按抽检结果）*/
     @Schema(description = "明细结果")
     private List<WmsQcSubmitLine> lines;
@@ -57,5 +65,13 @@ public class WmsQcSubmitForm {
         /**不合格原因*/
         @Schema(description = "不合格原因")
         private String failReason;
+
+        /**退货放置库位ID（本行专用）*/
+        @Schema(description = "退货放置库位ID")
+        private Integer returnLocaId;
+
+        /**退货联系处置备注（本行专用）*/
+        @Schema(description = "退货联系处置备注")
+        private String returnRemark;
     }
 }

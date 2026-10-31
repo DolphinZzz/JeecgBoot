@@ -34,4 +34,10 @@ public class WmsQualityCheckQuery {
 
     /**是否只看未出结论的（status 为 1/2），默认 false 看全部*/
     private Boolean onlyPending;
+
+    /**退货状态(0无需退货 1待退货处理 2已放置退货区待退供应商 3已退还供应商)*/
+    private Integer returnStatus;
+
+    /**只看含不合格品*/
+    private Boolean onlyFail;
 }

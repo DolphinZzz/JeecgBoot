@@ -57,4 +57,34 @@
         </if>
         ORDER BY u.create_time DESC, u.id DESC
     </select>
+
+    <select id="selectListByEntryId" resultType="org.jeecg.modules.wms.vo.WmsPutawayPage">
+        SELECT
+            u.id, u.entry_details_id, u.warehousing_entry_id, u.sku_id, u.batch_number,
+            u.warehouse_id, u.warehouse_area_id, u.warehouse_area_loca_id, u.count,
+            u.quality_status, u.strategy_used, u.recommend_loca_id, u.is_deviate,
+            u.deviate_reason, u.is_overflow, u.details_sort_id, u.status,
+            u.create_time, u.create_by, u.update_time, u.update_by,
+            e.entry_code,
+            w.name AS warehouse_name,
+            a.name AS area_name,
+            l.loca_code,
+            rl.loca_code AS recommend_loca_code,
+            s.code AS sku_code,
+            p.title AS spu_title,
+            d.received_count
+        FROM wms_warehousing_entry_up u
+        LEFT JOIN wms_warehousing_entry e ON e.id = u.warehousing_entry_id
+        LEFT JOIN wms_warehousing_entry_details d
+               ON d.id = u.entry_details_id AND d.is_del = 1
+        LEFT JOIN wms_warehouse w ON w.id = u.warehouse_id
+        LEFT JOIN wms_warehouse_area a ON a.id = u.warehouse_area_id
+        LEFT JOIN wms_warehouse_area_loca l ON l.id = u.warehouse_area_loca_id
+        LEFT JOIN wms_warehouse_area_loca rl ON rl.id = u.recommend_loca_id
+        LEFT JOIN wms_item_sku s ON s.id = u.sku_id
+        LEFT JOIN wms_item_spu p ON p.id = s.spu_id
+        WHERE u.warehousing_entry_id = #{entryId}
+          AND u.is_del = 1
+        ORDER BY u.id ASC
+    </select>
 </mapper>

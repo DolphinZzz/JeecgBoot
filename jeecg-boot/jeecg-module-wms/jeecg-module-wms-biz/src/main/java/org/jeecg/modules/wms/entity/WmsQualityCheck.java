@@ -72,6 +72,12 @@ public class WmsQualityCheck implements Serializable {
     @Schema(description = "质检方式(1免检 2抽检 3全检)")
     private Integer qcType;
 
+    /**来源(1质检 2收货破损)：破损订单在收货清点时自动生成，复用退货处置流程*/
+    @Excel(name = "来源", width = 10, dicCode = "wms_qc_source")
+    @Dict(dicCode = "wms_qc_source")
+    @Schema(description = "来源(1质检 2收货破损)")
+    private Integer source;
+
     /**送检数量*/
     @Excel(name = "送检数量", width = 12)
     @Schema(description = "送检数量")
@@ -99,6 +105,30 @@ public class WmsQualityCheck implements Serializable {
     /**关联退货单号（不合格品分流退货区时回填）*/
     @Schema(description = "关联退货单号")
     private String returnOrderNo;
+
+    /**退货放置库位ID*/
+    @Schema(description = "退货放置库位ID")
+    private Integer returnLocaId;
+
+    /**退货状态(0无需退货 1待退货处理 2已放置退货区待退供应商 3已退还供应商)*/
+    @Excel(name = "退货状态", width = 14, dicCode = "wms_qc_return_status")
+    @Dict(dicCode = "wms_qc_return_status")
+    @Schema(description = "退货状态(0无需退货 1待退货处理 2已放置退货区待退供应商 3已退还供应商)")
+    private Integer returnStatus;
+
+    /**退货联系处置备注*/
+    @Schema(description = "退货联系处置备注")
+    private String returnRemark;
+
+    /**退货处理时间*/
+    @JsonFormat(timezone = "GMT+8", pattern = "yyyy-MM-dd HH:mm:ss")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @Schema(description = "退货处理时间")
+    private Date returnHandleTime;
+
+    /**退货处理人*/
+    @Schema(description = "退货处理人")
+    private String returnHandleBy;
 
     /**质检员工ID*/
     @Schema(description = "质检员工ID")

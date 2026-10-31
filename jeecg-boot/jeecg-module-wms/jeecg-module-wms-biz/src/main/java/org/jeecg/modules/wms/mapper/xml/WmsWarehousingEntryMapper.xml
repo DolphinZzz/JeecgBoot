@@ -23,7 +23,13 @@
             (SELECT IFNULL(SUM(d.received_count), 0) FROM wms_warehousing_entry_details d
               WHERE d.warehousing_entry_id = e.id AND d.is_del = 1) AS received_total,
             (SELECT IFNULL(SUM(u.count), 0) FROM wms_warehousing_entry_up u
-              WHERE u.warehousing_entry_id = e.id AND u.status = 2 AND u.is_del = 1) AS putaway_total
+              WHERE u.warehousing_entry_id = e.id AND u.status = 2 AND (u.quality_status IS NULL OR u.quality_status = 1) AND u.is_del = 1) AS putaway_total,
+            (SELECT IFNULL(SUM(d.qc_pass_count), 0) FROM wms_warehousing_entry_details d
+              WHERE d.warehousing_entry_id = e.id AND d.is_del = 1) AS qc_pass_total,
+            (SELECT IFNULL(SUM(d.qc_fail_count), 0) FROM wms_warehousing_entry_details d
+              WHERE d.warehousing_entry_id = e.id AND d.is_del = 1) AS qc_fail_total,
+            (SELECT COUNT(*) FROM wms_quality_check q
+              WHERE q.warehousing_entry_id = e.id AND q.fail_count > 0 AND q.return_status = 1 AND q.is_del = 1) AS pending_return_rows
         FROM wms_warehousing_entry e
         LEFT JOIN wms_warehouse w ON w.id = e.warehouse_id
         LEFT JOIN wms_consignor c ON c.id = e.consignor_id

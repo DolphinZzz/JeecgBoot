@@ -5,8 +5,9 @@
     <select id="selectQualityCheckPage" resultType="org.jeecg.modules.wms.vo.WmsQualityCheckPage">
         SELECT
             q.id, q.qc_code, q.warehousing_entry_id, q.entry_details_id, q.mes_work_order_no,
-            q.sku_id, q.batch_number, q.qc_type, q.check_count, q.sample_count,
+            q.sku_id, q.batch_number, q.qc_type, q.source, q.check_count, q.sample_count,
             q.pass_count, q.fail_count, q.fail_reason, q.return_order_no,
+            q.return_loca_id, q.return_status, q.return_remark, q.return_handle_time, q.return_handle_by,
             q.qc_emp_id, q.qc_time, q.status,
             q.create_time, q.create_by, q.update_time, q.update_by,
             e.entry_code,
@@ -16,14 +17,24 @@
             w.warehouse_type AS warehouse_type,
             s.code AS sku_code,
             p.title AS spu_title,
-            d.received_count
+            d.received_count,
+            d.supplier_id,
+            sup.supplier_name,
+            sup.link_name AS supplier_link_name,
+            sup.link_phone AS supplier_link_phone,
+            sup.address AS supplier_address,
+            rl.loca_code AS return_loca_code,
+            ra.name AS return_area_name
         FROM wms_quality_check q
         LEFT JOIN wms_warehousing_entry e ON e.id = q.warehousing_entry_id
         LEFT JOIN wms_warehousing_entry_details d
                ON d.id = q.entry_details_id AND d.is_del = 1
+        LEFT JOIN wms_supplier sup ON sup.id = d.supplier_id AND sup.is_del = 1
         LEFT JOIN wms_warehouse w ON w.id = e.warehouse_id
         LEFT JOIN wms_item_sku s ON s.id = q.sku_id
         LEFT JOIN wms_item_spu p ON p.id = s.spu_id
+        LEFT JOIN wms_warehouse_area_loca rl ON rl.id = q.return_loca_id AND rl.is_del = 1
+        LEFT JOIN wms_warehouse_area ra ON ra.id = rl.warehouse_area_id AND ra.is_del = 1
         WHERE q.is_del = 1
         <if test="q.qcCode != null and q.qcCode != ''">
             AND q.qc_code LIKE CONCAT('%', #{q.qcCode}, '%')
@@ -48,6 +59,12 @@
         </if>
         <if test="q.onlyPending != null and q.onlyPending">
             AND q.status IN (1, 2)
+        </if>
+        <if test="q.returnStatus != null">
+            AND q.return_status = #{q.returnStatus}
+        </if>
+        <if test="q.onlyFail != null and q.onlyFail">
+            AND q.fail_count > 0
         </if>
         ORDER BY q.create_time DESC, q.id DESC
     </select>

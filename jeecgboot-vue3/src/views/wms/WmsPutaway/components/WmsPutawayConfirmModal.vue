@@ -177,6 +177,7 @@
       picked.value = initial;
     } catch (e: any) {
       createMessage.error(e?.message || '上架推荐失败');
+      closeModal();
     } finally {
       loading.value = false;
     }

@@ -67,6 +67,11 @@ public class WmsWarehousingEntryDetails implements Serializable {
     @Schema(description = "实收数量")
     private Integer receivedCount;
 
+    /**收货破损数量：破损件在收货时直接放入退货不良区，不参与质检与上架*/
+    @Excel(name = "破损数量", width = 12)
+    @Schema(description = "收货破损数量")
+    private Integer damageCount;
+
     /**供应商ID*/
     @Excel(name = "供应商", width = 18, dictTable = "wms_supplier", dicText = "supplier_name", dicCode = "id")
     @Dict(dictTable = "wms_supplier", dicText = "supplier_name", dicCode = "id")

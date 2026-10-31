@@ -20,7 +20,7 @@
 
     <a-alert type="info" show-icon style="margin-top: 12px">
       <template #message>
-        实收数量含破损件；破损数量直接计入退货区，不参与上架。超收与少收由后端按「实收 − 计划」自动计算：超收需主管放行，少收自动登记待补料。
+        实收数量含破损件（如计划 2 件、破损 1 件，实收应填 2）。破损件自动放入退货不良区货架并生成「收货破损」退货记录，不参与质检与上架，可在质检单页面联系供应商退还。超收与少收由后端按「实收 − 计划」自动计算：超收需主管放行，少收自动登记待补料。
       </template>
     </a-alert>
     <a-alert v-if="snWarning" type="warning" show-icon style="margin-top: 8px">
@@ -64,7 +64,7 @@
       spuTitle: d.spuTitle || '-',
       count: d.count ?? 0,
       receivedCount: d.receivedCount ?? d.count ?? 0,
-      damageCount: 0,
+      damageCount: d.damageCount ?? 0,
       snCodesText: '',
       isSnManaged: d.isSnManaged,
     }));

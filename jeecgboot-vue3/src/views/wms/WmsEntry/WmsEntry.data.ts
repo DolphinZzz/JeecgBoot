@@ -82,14 +82,34 @@ export const columns: BasicColumn[] = [
   {
     title: '实收',
     align: 'center',
-    width: 90,
+    width: 85,
     dataIndex: 'receivedTotal',
     customRender: ({ text }) => text ?? 0,
   },
   {
+    title: '合格数',
+    align: 'center',
+    width: 85,
+    dataIndex: 'qcPassTotal',
+    customRender: ({ text }) => {
+      const num = Number(text ?? 0);
+      return num > 0 ? h('span', { style: { color: '#52c41a', fontWeight: 500 } }, num) : 0;
+    },
+  },
+  {
+    title: '不合格',
+    align: 'center',
+    width: 85,
+    dataIndex: 'qcFailTotal',
+    customRender: ({ text }) => {
+      const num = Number(text ?? 0);
+      return num > 0 ? h('span', { style: { color: '#f5222d', fontWeight: 500 } }, num) : 0;
+    },
+  },
+  {
     title: '已上架',
     align: 'center',
-    width: 90,
+    width: 85,
     dataIndex: 'putawayTotal',
     customRender: ({ text }) => text ?? 0,
   },
@@ -290,6 +310,16 @@ export const receiveViewColumns: BasicColumn[] = [
     customRender: ({ text }) => text ?? 0,
   },
   {
+    title: '破损数',
+    align: 'center',
+    width: 90,
+    dataIndex: 'damageCount',
+    customRender: ({ text }) => {
+      const num = Number(text ?? 0);
+      return num > 0 ? h('span', { style: { color: '#f5222d', fontWeight: 500 } }, num) : 0;
+    },
+  },
+  {
     title: 'SN管理',
     align: 'center',
     width: 90,
@@ -370,6 +400,16 @@ export const detailViewColumns: BasicColumn[] = [
     dataIndex: 'receivedCount',
     customRender: ({ text }) => text ?? 0,
   },
+  {
+    title: '破损数',
+    align: 'center',
+    width: 90,
+    dataIndex: 'damageCount',
+    customRender: ({ text }) => {
+      const num = Number(text ?? 0);
+      return num > 0 ? h('span', { style: { color: '#f5222d', fontWeight: 500 } }, num) : 0;
+    },
+  },
   { title: '质检状态', align: 'center', width: 100, dataIndex: 'qcStatus_dictText', customRender: ({ text }) => text || '-' },
   { title: '合格数', align: 'center', width: 90, dataIndex: 'qcPassCount', customRender: ({ text }) => text ?? 0 },
   { title: '不合格数', align: 'center', width: 90, dataIndex: 'qcFailCount', customRender: ({ text }) => text ?? 0 },
@@ -385,22 +425,54 @@ export const detailViewColumns: BasicColumn[] = [
 
 /** 上架记录列 */
 export const putawayRecordColumns: BasicColumn[] = [
-  { title: '入库商品信息', align: 'left', width: 240, ellipsis: true, dataIndex: 'skuId_dictText' },
+  {
+    title: '入库商品信息',
+    align: 'left',
+    width: 240,
+    ellipsis: true,
+    dataIndex: 'skuId_dictText',
+    customRender: ({ record }) => {
+      if (record.skuId_dictText) return record.skuId_dictText;
+      if (record.skuCode || record.spuTitle) {
+        return `${record.skuCode || ''} ${record.spuTitle || ''}`.trim();
+      }
+      return record.skuId || '-';
+    },
+  },
   { title: '批次号', align: 'center', width: 120, dataIndex: 'batchNumber' },
-  { title: '上架库位', align: 'center', width: 130, dataIndex: 'warehouseAreaLocaId_dictText' },
-  { title: '上架数量', align: 'center', width: 100, dataIndex: 'count' },
-  { title: '策略', align: 'center', width: 100, dataIndex: 'strategyUsed', customRender: ({ text }) => text || '-' },
+  {
+    title: '上架库位',
+    align: 'center',
+    width: 140,
+    dataIndex: 'locaCode',
+    customRender: ({ record }) => {
+      if (record.warehouseAreaLocaId_dictText) return record.warehouseAreaLocaId_dictText;
+      if (record.locaCode) {
+        return record.areaName ? `${record.areaName} - ${record.locaCode}` : record.locaCode;
+      }
+      return record.warehouseAreaLocaId || '-';
+    },
+  },
+  { title: '上架数量', align: 'center', width: 90, dataIndex: 'count' },
+  {
+    title: '推荐库位',
+    align: 'center',
+    width: 120,
+    dataIndex: 'recommendLocaCode',
+    customRender: ({ text }) => text || '-',
+  },
+  { title: '策略', align: 'center', width: 90, dataIndex: 'strategyUsed', customRender: ({ text }) => text || '-' },
   {
     title: '偏离推荐',
     align: 'center',
-    width: 100,
+    width: 90,
     dataIndex: 'isDeviate',
     customRender: ({ record }) => {
       if (record.isDeviate !== 1) return '-';
       return h(Tag, { color: 'orange' }, () => '偏离');
     },
   },
-  { title: '偏离原因', align: 'left', width: 200, ellipsis: true, dataIndex: 'deviateReason', customRender: ({ text }) => text || '-' },
-  { title: '创建人', align: 'center', width: 110, dataIndex: 'createBy' },
+  { title: '偏离原因', align: 'left', width: 180, ellipsis: true, dataIndex: 'deviateReason', customRender: ({ text }) => text || '-' },
+  { title: '创建人', align: 'center', width: 100, dataIndex: 'createBy' },
   { title: '上架时间', align: 'center', width: 165, dataIndex: 'createTime' },
 ];

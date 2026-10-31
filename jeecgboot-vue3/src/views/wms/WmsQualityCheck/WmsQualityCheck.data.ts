@@ -6,6 +6,15 @@ import { BasicColumn, FormSchema } from '/@/components/Table';
 const statusColor: Record<number, string> = { 1: 'orange', 2: 'processing', 3: 'green', 4: 'red', 5: 'gold' };
 const statusText: Record<number, string> = { 1: '待质检', 2: '质检中', 3: '合格', 4: '不合格', 5: '部分合格' };
 
+/** 质检退货状态：0无需退货 1待退货处理 2已放置退货区待退供应商 3已退还供应商 */
+export const returnStatusColor: Record<number, string> = { 0: 'default', 1: 'orange', 2: 'processing', 3: 'green' };
+export const returnStatusText: Record<number, string> = {
+  0: '无需退货',
+  1: '待退货处理',
+  2: '已放置退货区待退供应商',
+  3: '已退还供应商',
+};
+
 /** 质检方式：1免检 2抽检 3全检 */
 const qcTypeText: Record<number, string> = { 1: '免检', 2: '抽检', 3: '全检' };
 
@@ -27,6 +36,16 @@ export const columns: BasicColumn[] = [
     width: 190,
     dataIndex: 'entryCode',
     customRender: ({ text }) => text || '-',
+  },
+  {
+    title: '来源',
+    align: 'center',
+    width: 100,
+    dataIndex: 'source',
+    customRender: ({ record }) =>
+      Number(record.source) === 2
+        ? h(Tag, { color: 'volcano' }, () => '收货破损')
+        : h(Tag, { color: 'blue' }, () => '质检'),
   },
   {
     title: '状态',
@@ -116,6 +135,49 @@ export const columns: BasicColumn[] = [
     customRender: ({ text }) => text || '-',
   },
   {
+    title: '退货状态',
+    align: 'center',
+    width: 155,
+    dataIndex: 'returnStatus',
+    customRender: ({ record }) => {
+      const status = Number(record.returnStatus ?? 0);
+      const text = returnStatusText[status] || record.returnStatus_dictText || '无需退货';
+      return h(Tag, { color: returnStatusColor[status] || 'default' }, () => text);
+    },
+  },
+  {
+    title: '退货货架库位',
+    align: 'center',
+    width: 140,
+    dataIndex: 'returnLocaCode',
+    customRender: ({ record }) => {
+      if (!record.returnLocaCode) return '-';
+      return record.returnAreaName ? `${record.returnAreaName} / ${record.returnLocaCode}` : record.returnLocaCode;
+    },
+  },
+  {
+    title: '退货单号',
+    align: 'center',
+    width: 175,
+    dataIndex: 'returnOrderNo',
+    customRender: ({ text }) => (text ? h('span', { style: { fontFamily: 'monospace', color: '#1890ff', fontWeight: 500 } }, text) : '-'),
+  },
+  {
+    title: '供应商信息',
+    align: 'left',
+    width: 190,
+    ellipsis: true,
+    dataIndex: 'supplierName',
+    customRender: ({ record }) => {
+      if (!record.supplierName) return '-';
+      const contact = [record.supplierLinkName, record.supplierLinkPhone].filter(Boolean).join(' ');
+      return h('div', {}, [
+        h('div', { style: { fontWeight: 500 } }, record.supplierName),
+        contact ? h('div', { style: { fontSize: '12px', color: '#8c8c8c' } }, contact) : null,
+      ]);
+    },
+  },
+  {
     title: '质检时间',
     align: 'center',
     width: 165,
@@ -138,7 +200,7 @@ export const searchFormSchema: FormSchema[] = [
     colProps: { span: 6 },
   },
   {
-    label: '状态',
+    label: '质检状态',
     field: 'status',
     component: 'Select',
     componentProps: {
@@ -154,8 +216,30 @@ export const searchFormSchema: FormSchema[] = [
     colProps: { span: 6 },
   },
   {
+    label: '退货状态',
+    field: 'returnStatus',
+    component: 'Select',
+    componentProps: {
+      placeholder: '请选择退货状态',
+      options: [
+        { label: '无需退货', value: 0 },
+        { label: '待退货处理', value: 1 },
+        { label: '已入退货区待退供应商', value: 2 },
+        { label: '已退还供应商', value: 3 },
+      ],
+    },
+    colProps: { span: 6 },
+  },
+  {
     label: '只看未出结论',
     field: 'onlyPending',
+    component: 'Switch',
+    componentProps: { checkedChildren: '是', unCheckedChildren: '否' },
+    colProps: { span: 6 },
+  },
+  {
+    label: '只看不合格品',
+    field: 'onlyFail',
     component: 'Switch',
     componentProps: { checkedChildren: '是', unCheckedChildren: '否' },
     colProps: { span: 6 },

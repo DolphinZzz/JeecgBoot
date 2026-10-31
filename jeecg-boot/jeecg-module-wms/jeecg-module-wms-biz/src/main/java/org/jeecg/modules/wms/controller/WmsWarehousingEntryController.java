@@ -17,6 +17,7 @@ import org.jeecg.modules.wms.vo.WmsEntryCreateForm;
 import org.jeecg.modules.wms.vo.WmsEntryDetailView;
 import org.jeecg.modules.wms.vo.WmsEntryPage;
 import org.jeecg.modules.wms.vo.WmsEntryQuery;
+import org.jeecg.modules.wms.vo.WmsPutawayPage;
 import org.jeecg.modules.wms.vo.WmsReceiveForm;
 import org.jeecg.modules.wms.vo.WmsWarehousingEntryResultVo;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -139,7 +140,7 @@ public class WmsWarehousingEntryController {
      */
     @Operation(summary = "入库单-查询上架记录")
     @GetMapping(value = "/queryPutawayRecords")
-    public Result<List<WmsWarehousingEntryUp>> queryPutawayRecords(@RequestParam(name = "id", required = true) Long id) {
+    public Result<List<WmsPutawayPage>> queryPutawayRecords(@RequestParam(name = "id", required = true) Long id) {
         return Result.OK(entryService.listPutawayRecords(id));
     }
 

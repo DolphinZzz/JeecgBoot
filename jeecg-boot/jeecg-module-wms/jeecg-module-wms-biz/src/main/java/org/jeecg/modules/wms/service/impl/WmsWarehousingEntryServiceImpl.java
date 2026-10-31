@@ -13,6 +13,7 @@ import org.jeecg.modules.wms.entity.WmsItemSku;
 import org.jeecg.modules.wms.entity.WmsItemSn;
 import org.jeecg.modules.wms.entity.WmsItemSpu;
 import org.jeecg.modules.wms.entity.WmsQualityCheck;
+import org.jeecg.modules.wms.entity.WmsSupplier;
 import org.jeecg.modules.wms.entity.WmsWarehouse;
 import org.jeecg.modules.wms.entity.WmsWarehouseArea;
 import org.jeecg.modules.wms.entity.WmsWarehouseAreaLoca;
@@ -31,6 +32,7 @@ import org.jeecg.modules.wms.mapper.WmsItemSkuMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSnMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSpuMapper;
 import org.jeecg.modules.wms.mapper.WmsQualityCheckMapper;
+import org.jeecg.modules.wms.mapper.WmsSupplierMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaLocaMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaMapper;
 import org.jeecg.modules.wms.mapper.WmsConsignorMapper;
@@ -52,9 +54,12 @@ import org.jeecg.modules.wms.vo.WmsEntryPage;
 import org.jeecg.modules.wms.vo.WmsEntryQuery;
 import org.jeecg.modules.wms.vo.WmsInventoryDimension;
 import org.jeecg.modules.wms.vo.WmsPutawayConfirmForm;
+import org.jeecg.modules.wms.vo.WmsPutawayPage;
 import org.jeecg.modules.wms.vo.WmsPutawayPlan;
 import org.jeecg.modules.wms.vo.WmsPutawayPlanLine;
 import org.jeecg.modules.wms.vo.WmsPutawayRequest;
+import org.jeecg.modules.wms.vo.WmsQcReturnForm;
+import org.jeecg.modules.wms.vo.WmsQcShipReturnForm;
 import org.jeecg.modules.wms.vo.WmsQcSubmitForm;
 import org.jeecg.modules.wms.vo.WmsReceiveForm;
 import org.jeecg.modules.wms.vo.WmsWarehousingEntryResultVo;
@@ -66,6 +71,7 @@ import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -118,6 +124,22 @@ public class WmsWarehousingEntryServiceImpl
     /** 单号前缀 */
     private static final String ENTRY_CODE_PREFIX = "RK";
     private static final String QC_CODE_PREFIX = "QC";
+    private static final String RETURN_CODE_PREFIX = "TH";
+    /** 破损退货单号前缀（收货清点检出破损时自动生成） */
+    private static final String DAMAGE_CODE_PREFIX = "PD";
+    /** 质检单来源：质检 */
+    private static final int QC_SOURCE_QC = 1;
+    /** 质检单来源：收货破损 */
+    private static final int QC_SOURCE_DAMAGE = 2;
+    /** 库区类型：退货不良区 */
+    private static final String AREA_RETURN = "RETURN";
+    /** 质检退货状态：0无需退货 1待退货处理 2已放置退货区待退供应商 3已退还供应商 */
+    private static final int QC_RETURN_STATUS_NONE = 0;
+    private static final int QC_RETURN_STATUS_PENDING = 1;
+    private static final int QC_RETURN_STATUS_STORED = 2;
+    private static final int QC_RETURN_STATUS_SHIPPED = 3;
+    /** SN 状态：已退货 */
+    private static final int SN_RETURNED = 6;
 
     @Autowired
     private WmsWarehousingEntryDetailsMapper detailsMapper;
@@ -148,6 +170,9 @@ public class WmsWarehousingEntryServiceImpl
 
     @Autowired
     private WmsConsignorMapper consignorMapper;
+
+    @Autowired
+    private WmsSupplierMapper supplierMapper;
 
     @Autowired
     private WmsWarehouseAreaMapper areaMapper;
@@ -466,6 +491,7 @@ public class WmsWarehousingEntryServiceImpl
             detailsMapper.updateById(new WmsWarehousingEntryDetails()
                     .setId(detail.getId())
                     .setReceivedCount(received)
+                    .setDamageCount(damage)
                     .setRealArrivalTime(now)
                     .setUnloadEmpId(form.getUnloadEmpId())
                     .setUnloadTime(now)
@@ -482,6 +508,12 @@ public class WmsWarehousingEntryServiceImpl
                     .setLackCount(lack)
                     .setCreateTime(now)
                     .setIsDel(1));
+
+            // 破损件在收货时即分流到退货不良区货架，并生成可追溯的破损退货记录，
+            // 后续由质检单页面完成「联系供应商 → 确认退还出库」的闭环。
+            if (damage > 0) {
+                placeDamageIntoReturnArea(entry, detail, damage, now);
+            }
         }
 
         // 未提交的明细视为未到货：实收按 0、整批计少收，并落一条空分拣行，
@@ -591,10 +623,17 @@ public class WmsWarehousingEntryServiceImpl
         Date now = new Date();
         int created = 0;
         int exempt = 0;
+        boolean hasGoodPiece = false;
         for (WmsWarehousingEntryDetails detail : details) {
             int received = detail.getReceivedCount() == null ? 0 : detail.getReceivedCount();
-            if (received <= 0) {
-                // 完全没收到货的明细不进质检，避免生成 0 件的空质检单
+            int damage = detail.getDamageCount() == null ? 0 : detail.getDamageCount();
+            // 破损件已分流到退货不良区，只对完好件送检，避免破损品重复计入质检结论
+            int goodCount = received - damage;
+            if (goodCount > 0) {
+                hasGoodPiece = true;
+            }
+            if (goodCount <= 0) {
+                // 完全没收到货 / 整批破损的明细不进质检，避免生成 0 件的空质检单
                 continue;
             }
             // 已有未出结论的质检单就跳过，支持重复提交不重复生成
@@ -607,7 +646,7 @@ public class WmsWarehousingEntryServiceImpl
             }
             WmsItemSku sku = skuMapper.selectById(detail.getSkuId());
             WmsQcTypeEnum qcType = WmsQcTypeEnum.of(sku == null ? null : sku.getQcType());
-            int checkCount = received;
+            int checkCount = goodCount;
             WmsQualityCheck record = new WmsQualityCheck()
                     .setQcCode(nextCode(QC_CODE_PREFIX))
                     .setWarehousingEntryId(entryId)
@@ -616,6 +655,7 @@ public class WmsWarehousingEntryServiceImpl
                     .setSkuId(detail.getSkuId())
                     .setBatchNumber(detail.getBatchNumber())
                     .setQcType(qcType.getCode())
+                    .setSource(QC_SOURCE_QC)
                     .setCheckCount(checkCount)
                     .setSampleCount(qcType.defaultSampleCount(checkCount))
                     .setPassCount(0)
@@ -633,6 +673,22 @@ public class WmsWarehousingEntryServiceImpl
             }
         }
 
+        if (!hasGoodPiece) {
+            // 整单没有完好件（全部破损或少收为 0）：无需质检与上架，
+            // 破损件已入退货区，入库单直接按结单条件判定（满足则置 60 已完成）
+            entry.setStatus(WmsEntryStatusEnum.PENDING_PUTAWAY.getCode()).setUpdateTime(now);
+            baseMapper.updateById(entry);
+            checkAndCompleteEntryIfEligible(entryId, now);
+
+            Map<String, Object> noQcResult = new LinkedHashMap<>();
+            noQcResult.put("entryCode", entry.getEntryCode());
+            noQcResult.put("status", entry.getStatus());
+            noQcResult.put("statusText", statusDesc(entry.getStatus()));
+            noQcResult.put("qcCreated", 0);
+            noQcResult.put("qcExempt", 0);
+            noQcResult.put("message", "整单无完好件可送检，破损件已入退货不良区，请到质检单页面联系供应商退还");
+            return noQcResult;
+        }
         if (created == 0 && exempt == 0) {
             throw new JeecgBootException("没有需要质检的明细（可能已全部生成过质检单）");
         }
@@ -649,13 +705,13 @@ public class WmsWarehousingEntryServiceImpl
         return result;
     }
 
-    /** 免检放行：直接落合格结论并回写明细 */
+    /** 免检放行：直接落合格结论并回写明细（破损件已入退货区，不计入合格品） */
     private void passExempt(WmsQualityCheck record, WmsWarehousingEntryDetails detail, Date now) {
-        int received = detail.getReceivedCount() == null ? 0 : detail.getReceivedCount();
+        int goodCount = detailGoodCount(detail);
         qualityCheckMapper.updateById(new WmsQualityCheck()
                 .setId(record.getId())
                 .setSampleCount(0)
-                .setPassCount(received)
+                .setPassCount(goodCount)
                 .setFailCount(0)
                 .setStatus(WmsQcStatusEnum.PASS.getCode())
                 .setQcTime(now)
@@ -663,9 +719,16 @@ public class WmsWarehousingEntryServiceImpl
         detailsMapper.updateById(new WmsWarehousingEntryDetails()
                 .setId(detail.getId())
                 .setQcStatus(WmsQcStatusEnum.PASS.getCode())
-                .setQcPassCount(received)
+                .setQcPassCount(goodCount)
                 .setQcFailCount(0)
                 .setUpdateTime(now));
+    }
+
+    /** 明细可送检 / 可上架的完好件数量 = 实收 − 收货破损 */
+    private int detailGoodCount(WmsWarehousingEntryDetails detail) {
+        int received = detail.getReceivedCount() == null ? 0 : detail.getReceivedCount();
+        int damage = detail.getDamageCount() == null ? 0 : detail.getDamageCount();
+        return Math.max(0, received - damage);
     }
 
     // ==================================================================
@@ -737,6 +800,26 @@ public class WmsWarehousingEntryServiceImpl
             String failReason = line != null && oConvertUtils.isNotEmpty(line.getFailReason())
                     ? line.getFailReason().trim() : form.getFailReason();
 
+            // 不合格退货处理
+            Integer returnLocaId = line != null && line.getReturnLocaId() != null
+                    ? line.getReturnLocaId() : form.getReturnLocaId();
+            String returnRemark = line != null && oConvertUtils.isNotEmpty(line.getReturnRemark())
+                    ? line.getReturnRemark().trim() : (form.getReturnRemark() != null ? form.getReturnRemark().trim() : null);
+
+            int returnStatus = QC_RETURN_STATUS_NONE;
+            String returnOrderNo = record.getReturnOrderNo();
+            if (failCount > 0) {
+                if (oConvertUtils.isEmpty(returnOrderNo)) {
+                    returnOrderNo = nextCode(RETURN_CODE_PREFIX);
+                }
+                if (returnLocaId != null) {
+                    doPlaceInReturnArea(record, returnLocaId, failCount, returnOrderNo, returnRemark, now);
+                    returnStatus = QC_RETURN_STATUS_STORED;
+                } else {
+                    returnStatus = QC_RETURN_STATUS_PENDING;
+                }
+            }
+
             qualityCheckMapper.updateById(new WmsQualityCheck()
                     .setId(qcId)
                     .setQcType(qcType.getCode())
@@ -744,6 +827,12 @@ public class WmsWarehousingEntryServiceImpl
                     .setPassCount(passCount)
                     .setFailCount(failCount)
                     .setFailReason(oConvertUtils.isNotEmpty(failReason) ? failReason : record.getFailReason())
+                    .setReturnOrderNo(returnOrderNo)
+                    .setReturnLocaId(returnLocaId)
+                    .setReturnStatus(returnStatus)
+                    .setReturnRemark(returnRemark)
+                    .setReturnHandleTime(returnStatus >= QC_RETURN_STATUS_STORED ? now : null)
+                    .setReturnHandleBy(returnStatus >= QC_RETURN_STATUS_STORED ? currentUsername() : null)
                     .setQcEmpId(form.getQcEmpId())
                     .setQcTime(now)
                     .setStatus(status.getCode())
@@ -763,7 +852,7 @@ public class WmsWarehousingEntryServiceImpl
             }
         }
 
-        // 全部明细都出了结论才推进到 40，否则仍停在 30 等剩余质检
+        // 全部明细都出了结论后推进单据状态
         if (entryId != null) {
             List<WmsWarehousingEntryDetails> details = detailsMapper.selectList(
                     new LambdaQueryWrapper<WmsWarehousingEntryDetails>()
@@ -773,10 +862,19 @@ public class WmsWarehousingEntryServiceImpl
                     .allMatch(d -> d.getQcStatus() != null && d.getQcStatus() != WmsQcStatusEnum.PENDING.getCode()
                             && d.getQcStatus() != WmsQcStatusEnum.CHECKING.getCode());
             if (allDecided) {
-                baseMapper.updateById(new WmsWarehousingEntry()
-                        .setId(entryId)
-                        .setStatus(WmsEntryStatusEnum.PENDING_PUTAWAY.getCode())
-                        .setUpdateTime(now));
+                int totalPass = details.stream().mapToInt(this::qcPassOf).sum();
+                if (totalPass == 0) {
+                    // 全单无合格品，直接入库完成；不合格品/破损品作为独立退货分支异步处置
+                    baseMapper.updateById(new WmsWarehousingEntry()
+                            .setId(entryId)
+                            .setStatus(WmsEntryStatusEnum.COMPLETED.getCode())
+                            .setUpdateTime(now));
+                } else {
+                    baseMapper.updateById(new WmsWarehousingEntry()
+                            .setId(entryId)
+                            .setStatus(WmsEntryStatusEnum.PENDING_PUTAWAY.getCode())
+                            .setUpdateTime(now));
+                }
             }
         }
 
@@ -829,6 +927,9 @@ public class WmsWarehousingEntryServiceImpl
             throw new JeecgBootException("只有质检完成的单据可以上架，当前状态：" + statusDesc(entry.getStatus()));
         }
         List<WmsWarehousingEntryDetails> details = pendingPutawayDetails(entryId);
+        if (details.isEmpty()) {
+            throw buildNoPutawayReason(entryId);
+        }
         WmsPutawayPlan merged = null;
         for (WmsWarehousingEntryDetails detail : details) {
             // 待上架量 = 质检合格数 - 已上架数（不是「实收 - 合格」，那样合格品全上不了）
@@ -870,7 +971,7 @@ public class WmsWarehousingEntryServiceImpl
             }
         }
         if (merged == null) {
-            throw new JeecgBootException("本单没有可上架的合格品");
+            throw buildNoPutawayReason(entryId);
         }
         return merged;
     }
@@ -888,7 +989,7 @@ public class WmsWarehousingEntryServiceImpl
         }
         List<WmsWarehousingEntryDetails> details = pendingPutawayDetails(entry.getId());
         if (details.isEmpty()) {
-            throw new JeecgBootException("本单没有待上架的明细");
+            throw buildNoPutawayReason(entry.getId());
         }
         Map<Long, WmsWarehousingEntryDetails> detailMap = details.stream()
                 .collect(Collectors.toMap(WmsWarehousingEntryDetails::getId, d -> d, (a, b) -> a));
@@ -1039,11 +1140,17 @@ public class WmsWarehousingEntryServiceImpl
         }
 
         // 全部合格品都上架完了才置 60，否则停在 50 上架中
-        boolean allDone = details.stream()
+        boolean allPassDone = details.stream()
                 .allMatch(d -> putawayCountOf(d.getId()) >= qcPassOf(d));
-        entry.setStatus(allDone ? WmsEntryStatusEnum.COMPLETED.getCode() : WmsEntryStatusEnum.PUTAWAY.getCode())
-                .setUpdateTime(now);
-        baseMapper.updateById(entry);
+        if (allPassDone) {
+            checkAndCompleteEntryIfEligible(entry.getId(), now);
+            WmsWarehousingEntry refreshed = baseMapper.selectById(entry.getId());
+            entry.setStatus(refreshed.getStatus());
+        } else {
+            entry.setStatus(WmsEntryStatusEnum.PUTAWAY.getCode()).setUpdateTime(now);
+            baseMapper.updateById(entry);
+        }
+        boolean allDone = entry.getStatus() == WmsEntryStatusEnum.COMPLETED.getCode();
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("entryCode", entry.getEntryCode());
@@ -1053,15 +1160,224 @@ public class WmsWarehousingEntryServiceImpl
         result.put("deviateRows", deviateRows);
         result.put("message", allDone
                 ? String.format("入库完成：上架 %d 件，其中偏离推荐 %d 行", totalPutaway, deviateRows)
-                : String.format("上架 %d 件，仍有未上架的合格品，单据保持上架中", totalPutaway));
+                : (allPassDone
+                    ? String.format("上架 %d 件，本单合格品已全部上架完毕。剩余不合格品请在「质检单」中进行退货安置以完成结单", totalPutaway)
+                    : String.format("上架 %d 件，仍有未上架的合格品，单据保持上架中", totalPutaway)));
         return result;
     }
 
     @Override
-    public List<WmsWarehousingEntryUp> listPutawayRecords(Long entryId) {
-        return entryUpMapper.selectList(new LambdaQueryWrapper<WmsWarehousingEntryUp>()
-                .eq(WmsWarehousingEntryUp::getWarehousingEntryId, entryId)
-                .orderByAsc(WmsWarehousingEntryUp::getId));
+    public List<WmsPutawayPage> listPutawayRecords(Long entryId) {
+        return entryUpMapper.selectListByEntryId(entryId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> handleQcReturn(WmsQcReturnForm form) {
+        if (form == null || form.getQcId() == null) {
+            throw new JeecgBootException("请指定质检单");
+        }
+        if (form.getReturnLocaId() == null) {
+            throw new JeecgBootException("请选择退货货架库位");
+        }
+        WmsQualityCheck qc = qualityCheckMapper.selectById(form.getQcId());
+        if (qc == null) {
+            throw new JeecgBootException("质检单不存在: " + form.getQcId());
+        }
+        int failCount = qc.getFailCount() == null ? 0 : qc.getFailCount();
+        if (failCount <= 0) {
+            throw new JeecgBootException("质检单[" + qc.getQcCode() + "]无不合格品，无需退货处理");
+        }
+        if (qc.getReturnStatus() != null && qc.getReturnStatus() == QC_RETURN_STATUS_SHIPPED) {
+            throw new JeecgBootException("质检单[" + qc.getQcCode() + "]已完成退还供应商，不能重复处置");
+        }
+        Date now = new Date();
+        String returnOrderNo = qc.getReturnOrderNo();
+        if (oConvertUtils.isEmpty(returnOrderNo)) {
+            returnOrderNo = nextCode(RETURN_CODE_PREFIX);
+        }
+        String remark = form.getReturnRemark() != null ? form.getReturnRemark().trim() : null;
+
+        // 若尚未落库退货区，执行落库
+        if (qc.getReturnStatus() == null || qc.getReturnStatus() < QC_RETURN_STATUS_STORED) {
+            doPlaceInReturnArea(qc, form.getReturnLocaId(), failCount, returnOrderNo, remark, now);
+        }
+
+        // 更新质检单
+        qualityCheckMapper.updateById(new WmsQualityCheck()
+                .setId(qc.getId())
+                .setReturnLocaId(form.getReturnLocaId())
+                .setReturnStatus(QC_RETURN_STATUS_STORED)
+                .setReturnOrderNo(returnOrderNo)
+                .setReturnRemark(remark)
+                .setReturnHandleTime(now)
+                .setReturnHandleBy(currentUsername())
+                .setUpdateTime(now));
+
+        // 检查关联的入库单是否可以结单
+        if (qc.getWarehousingEntryId() != null) {
+            checkAndCompleteEntryIfEligible(qc.getWarehousingEntryId(), now);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("qcCode", qc.getQcCode());
+        result.put("returnOrderNo", returnOrderNo);
+        result.put("returnStatus", QC_RETURN_STATUS_STORED);
+        result.put("message", String.format("退货处理成功：已将 %d 件不合格品放置到退货货架区，退货单号 %s", failCount, returnOrderNo));
+        return result;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> shipQcReturn(WmsQcShipReturnForm form) {
+        if (form == null || form.getQcId() == null) {
+            throw new JeecgBootException("请指定质检单");
+        }
+        WmsQualityCheck qc = qualityCheckMapper.selectById(form.getQcId());
+        if (qc == null) {
+            throw new JeecgBootException("质检单不存在: " + form.getQcId());
+        }
+        if (qc.getReturnStatus() == null || qc.getReturnStatus() != QC_RETURN_STATUS_STORED) {
+            throw new JeecgBootException("只有「已入退货区待退供应商」的记录可以确认退还，当前状态：" + qc.getReturnStatus());
+        }
+        if (qc.getReturnLocaId() == null) {
+            throw new JeecgBootException("未指定退货货架库位，无法出库扣减");
+        }
+        WmsWarehouseAreaLoca loca = locaMapper.selectById(qc.getReturnLocaId());
+        if (loca == null) {
+            throw new JeecgBootException("退货库位不存在: " + qc.getReturnLocaId());
+        }
+        int failCount = qc.getFailCount() == null ? 0 : qc.getFailCount();
+        Date now = new Date();
+        WmsWarehousingEntry entry = baseMapper.selectById(qc.getWarehousingEntryId());
+        WmsWarehousingEntryDetails detail = detailsMapper.selectById(qc.getEntryDetailsId());
+        String supplierName = "";
+        if (detail != null && detail.getSupplierId() != null) {
+            WmsSupplier supplier = supplierMapper.selectById(detail.getSupplierId());
+            if (supplier != null && oConvertUtils.isNotEmpty(supplier.getSupplierName())) {
+                supplierName = supplier.getSupplierName();
+            }
+        }
+
+        // 扣减退货货架区的不良品库存
+        WmsInventoryDimension dim = new WmsInventoryDimension()
+                .setWarehouseId(loca.getWarehouseId())
+                .setWarehouseAreaId(loca.getWarehouseAreaId())
+                .setWarehouseAreaLocaId(loca.getId())
+                .setConsignorId(entry == null ? null : entry.getConsignorId())
+                .setSkuId(qc.getSkuId())
+                .setBatchNumber(qc.getBatchNumber())
+                .setQualityStatus(QUALITY_BAD)
+                .setProdDate(detail == null ? null : detail.getProdDate())
+                .setExpireDate(detail == null ? null : detail.getExpireDate());
+
+        String shipRemark = form.getShipRemark() != null ? form.getShipRemark().trim() : "";
+        String logRemark = String.format("确认退还供应商出库：退货单[%s]，供应商[%s]%s",
+                qc.getReturnOrderNo(),
+                oConvertUtils.isNotEmpty(supplierName) ? supplierName : "无",
+                oConvertUtils.isNotEmpty(shipRemark) ? "，发运说明：" + shipRemark : "");
+
+        inventoryService.applyChange(dim, -failCount, 0, 0,
+                WmsInventoryBizTypeEnum.OUTBOUND_DEDUCT,
+                qc.getReturnOrderNo(),
+                logRemark);
+
+        WmsItemSku sku = skuMapper.selectById(qc.getSkuId());
+        WmsItemSpu spu = sku == null || sku.getSpuId() == null ? null : spuMapper.selectById(sku.getSpuId());
+        int unitVolume = WmsUnitConverter.skuUnitVolumeCm3(sku, spu);
+        int unitWeight = WmsUnitConverter.skuUnitWeightG(sku, spu);
+        touchLocaUsage(loca.getId(), -unitVolume * failCount, -unitWeight * failCount);
+
+        // SN 状态流转为已退货 (6)
+        if (detail != null && entry != null) {
+            registerReturnedSnOnShip(detail, entry, countOf(failCount), now);
+        }
+
+        String updatedRemark = oConvertUtils.isNotEmpty(qc.getReturnRemark())
+                ? qc.getReturnRemark() + (oConvertUtils.isNotEmpty(shipRemark) ? " | 出库发运：" + shipRemark : " | 已退还供应商")
+                : (oConvertUtils.isNotEmpty(shipRemark) ? "出库发运：" + shipRemark : "已退还供应商");
+
+        qualityCheckMapper.updateById(new WmsQualityCheck()
+                .setId(qc.getId())
+                .setReturnStatus(QC_RETURN_STATUS_SHIPPED)
+                .setReturnRemark(updatedRemark)
+                .setUpdateTime(now));
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("qcCode", qc.getQcCode());
+        result.put("returnOrderNo", qc.getReturnOrderNo());
+        result.put("returnStatus", QC_RETURN_STATUS_SHIPPED);
+        result.put("message", String.format("退还供应商完成：退货单号 %s，出库扣减 %d 件不良品", qc.getReturnOrderNo(), failCount));
+        return result;
+    }
+
+    @Override
+    public List<WmsWarehouseAreaLoca> listReturnLocaOptions(Long qcId, Integer warehouseId) {
+        Integer targetWhId = warehouseId;
+        if (targetWhId == null && qcId != null) {
+            WmsQualityCheck qc = qualityCheckMapper.selectById(qcId);
+            if (qc != null && qc.getWarehousingEntryId() != null) {
+                WmsWarehousingEntry entry = baseMapper.selectById(qc.getWarehousingEntryId());
+                if (entry != null) {
+                    targetWhId = entry.getWarehouseId();
+                }
+            }
+        }
+        if (targetWhId == null) {
+            throw new JeecgBootException("请指定质检单或仓库");
+        }
+        // 查询该仓库 category = 'RETURN' 的库区
+        List<WmsWarehouseArea> returnAreas = areaMapper.selectList(new LambdaQueryWrapper<WmsWarehouseArea>()
+                .eq(WmsWarehouseArea::getWarehouseId, targetWhId)
+                .eq(WmsWarehouseArea::getCategory, AREA_RETURN)
+                .orderByAsc(WmsWarehouseArea::getId));
+        if (returnAreas.isEmpty()) {
+            // 如果仓库没有退货不良区，自动创建一个默认退货库区和库位
+            WmsWarehouseArea defaultArea = new WmsWarehouseArea()
+                    .setWarehouseId(targetWhId)
+                    .setName("退货不良品区")
+                    .setCategory(AREA_RETURN)
+                    .setZoneType("GENERAL")
+                    .setStorageCondition("NORMAL")
+                    .setCreateTime(new Date())
+                    .setCreateBy("system")
+                    .setIsDel(1);
+            areaMapper.insert(defaultArea);
+            returnAreas = Collections.singletonList(defaultArea);
+        }
+        List<Integer> areaIds = returnAreas.stream().map(WmsWarehouseArea::getId).collect(Collectors.toList());
+        List<WmsWarehouseAreaLoca> locas = locaMapper.selectList(new LambdaQueryWrapper<WmsWarehouseAreaLoca>()
+                .eq(WmsWarehouseAreaLoca::getWarehouseId, targetWhId)
+                .in(WmsWarehouseAreaLoca::getWarehouseAreaId, areaIds)
+                .notIn(WmsWarehouseAreaLoca::getLocaStatus, 3, 4) // 排除盘点锁定与禁用
+                .orderByAsc(WmsWarehouseAreaLoca::getLocaCode));
+        if (locas.isEmpty()) {
+            // 为退货区自动创建一个默认退货货架库位
+            WmsWarehouseArea area = returnAreas.get(0);
+            WmsWarehouseAreaLoca defaultLoca = new WmsWarehouseAreaLoca()
+                    .setWarehouseId(targetWhId)
+                    .setWarehouseAreaId(area.getId())
+                    .setLocaCode("R-01-01")
+                    .setLocaStatus(1)
+                    .setLocalVolume(10000000)
+                    .setLocalBearingCapacity(5000000)
+                    .setUsedVolume(0)
+                    .setUsedWeight(0)
+                    .setTunnelNumber("1")
+                    .setShelfNumber("1")
+                    .setLayerNumber("1")
+                    .setPositionNumber("1")
+                    .setAbcClass("C")
+                    .setStorageCondition("NORMAL")
+                    .setAllowMixSku(1)
+                    .setAllowMixBatch(1)
+                    .setCreateTime(new Date())
+                    .setCreateBy("system")
+                    .setIsDel(1);
+            locaMapper.insert(defaultLoca);
+            locas = Collections.singletonList(defaultLoca);
+        }
+        return locas;
     }
 
     @Override
@@ -1248,13 +1564,20 @@ public class WmsWarehousingEntryServiceImpl
                 .last("LIMIT 1"), false);
     }
 
-    /** 明细已上架数量 */
+    /**
+     * 明细已上架的良品数量。
+     * 破损件 / 质检不合格品也会写 wms_warehousing_entry_up 留痕（qualityStatus = 3），
+     * 这里必须只统计良品，否则会把它们算进「已上架」导致入库单提前结单。
+     */
     private int putawayCountOf(Long detailId) {
         List<WmsWarehousingEntryUp> rows = entryUpMapper.selectList(
                 new LambdaQueryWrapper<WmsWarehousingEntryUp>()
                         .eq(WmsWarehousingEntryUp::getEntryDetailsId, detailId)
                         .eq(WmsWarehousingEntryUp::getStatus, UP_DONE));
-        return rows.stream().mapToInt(r -> countOf(r.getCount())).sum();
+        return rows.stream()
+                .filter(r -> r.getQualityStatus() == null || r.getQualityStatus() == QUALITY_GOOD)
+                .mapToInt(r -> countOf(r.getCount()))
+                .sum();
     }
 
     private int receivedOf(WmsWarehousingEntryDetails detail) {
@@ -1335,6 +1658,336 @@ public class WmsWarehousingEntryServiceImpl
     private String nextBatchNumber() {
         String ts = new SimpleDateFormat("yyyyMMdd").format(new Date());
         return "B" + ts + String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
+    }
+
+    /**
+     * 将质检不合格品放置到退货不良货架区（RETURN库区）
+     */
+    private void doPlaceInReturnArea(WmsQualityCheck qc, Integer returnLocaId, int count,
+                                     String returnOrderNo, String remark, Date now) {
+        if (returnLocaId == null) {
+            throw new JeecgBootException("请指定退货货架库位");
+        }
+        WmsWarehouseAreaLoca loca = locaMapper.selectById(returnLocaId);
+        if (loca == null) {
+            throw new JeecgBootException("指定的退货库位不存在: " + returnLocaId);
+        }
+        if (loca.getLocaStatus() != null && loca.getLocaStatus() == 4) {
+            throw new JeecgBootException("退货库位[" + loca.getLocaCode() + "]已禁用");
+        }
+        if (loca.getLocaStatus() != null && loca.getLocaStatus() == 3) {
+            throw new JeecgBootException("退货库位[" + loca.getLocaCode() + "]正在盘点锁定");
+        }
+        WmsWarehouseArea area = areaMapper.selectById(loca.getWarehouseAreaId());
+        if (area == null || !AREA_RETURN.equals(area.getCategory())) {
+            throw new JeecgBootException("库位[" + loca.getLocaCode() + "]所在库区类型非退货不良区(RETURN)，不合格品只能放入退货货架区");
+        }
+        WmsWarehousingEntry entry = baseMapper.selectById(qc.getWarehousingEntryId());
+        if (entry != null && !entry.getWarehouseId().equals(loca.getWarehouseId())) {
+            throw new JeecgBootException("退货库位[" + loca.getLocaCode() + "]与入库单所属仓库不一致");
+        }
+
+        WmsWarehousingEntryDetails detail = detailsMapper.selectById(qc.getEntryDetailsId());
+        String supplierName = "";
+        if (detail != null && detail.getSupplierId() != null) {
+            WmsSupplier supplier = supplierMapper.selectById(detail.getSupplierId());
+            if (supplier != null && oConvertUtils.isNotEmpty(supplier.getSupplierName())) {
+                supplierName = supplier.getSupplierName();
+            }
+        }
+
+        WmsItemSku sku = skuMapper.selectById(qc.getSkuId());
+        WmsItemSpu spu = sku == null || sku.getSpuId() == null ? null : spuMapper.selectById(sku.getSpuId());
+        int unitVolume = WmsUnitConverter.skuUnitVolumeCm3(sku, spu);
+        int unitWeight = WmsUnitConverter.skuUnitWeightG(sku, spu);
+
+        // 1. 库存更新：不良品库存增加 (qualityStatus = 3)
+        WmsInventoryDimension dim = new WmsInventoryDimension()
+                .setWarehouseId(loca.getWarehouseId())
+                .setWarehouseAreaId(loca.getWarehouseAreaId())
+                .setWarehouseAreaLocaId(loca.getId())
+                .setConsignorId(entry == null ? null : entry.getConsignorId())
+                .setSkuId(qc.getSkuId())
+                .setBatchNumber(qc.getBatchNumber())
+                .setQualityStatus(QUALITY_BAD)
+                .setProdDate(detail == null ? null : detail.getProdDate())
+                .setExpireDate(detail == null ? null : detail.getExpireDate());
+
+        String logRemark = String.format("质检不合格品放置退货区：库位[%s]，供应商[%s]，退货单号[%s]%s",
+                loca.getLocaCode(),
+                oConvertUtils.isNotEmpty(supplierName) ? supplierName : "无",
+                returnOrderNo,
+                oConvertUtils.isNotEmpty(remark) ? "，处置说明：" + remark : "");
+
+        WmsInventory inventory = inventoryService.applyChange(dim, count, 0, 0,
+                WmsInventoryBizTypeEnum.INBOUND_PUTAWAY,
+                entry == null ? qc.getQcCode() : entry.getEntryCode(),
+                logRemark);
+
+        // 2. 占用体积与重量更新
+        if (inventory != null) {
+            inventoryMapper.updateUsage(inventory.getId(),
+                    countOf(inventory.getUsedVolume()) + unitVolume * count,
+                    countOf(inventory.getUsedWeight()) + unitWeight * count);
+        }
+        touchLocaUsage(loca.getId(), unitVolume * count, unitWeight * count);
+
+        // 3. 上架记录（标记为不良品 3）
+        WmsWarehousingEntryDetailsSort sortRow = findSortRow(qc.getEntryDetailsId());
+        entryUpMapper.insert(new WmsWarehousingEntryUp()
+                .setEntryDetailsId(qc.getEntryDetailsId())
+                .setWarehousingEntryId(qc.getWarehousingEntryId())
+                .setSkuId(qc.getSkuId())
+                .setBatchNumber(qc.getBatchNumber())
+                .setWarehouseId(loca.getWarehouseId())
+                .setWarehouseAreaId(loca.getWarehouseAreaId())
+                .setWarehouseAreaLocaId(loca.getId())
+                .setCount(count)
+                .setQualityStatus(QUALITY_BAD)
+                .setStrategyUsed("RETURN")
+                .setRecommendLocaId(loca.getId())
+                .setIsDeviate(0)
+                .setDeviateReason(null)
+                .setIsOverflow(0)
+                .setDetailsSortId(sortRow != null ? sortRow.getId() : null)
+                .setStatus(UP_DONE)
+                .setCreateTime(now)
+                .setCreateBy(currentUsername())
+                .setIsDel(1));
+
+        // 4. SN 登记为在库不良（如果有 SN）
+        if (detail != null && entry != null) {
+            registerBadSnOnReturn(detail, entry, loca.getId(), count, entry.getWarehouseId(), now);
+        }
+    }
+
+    /**
+     * 收货清点检出破损：破损件直接分流到退货不良区（RETURN）货架落库，
+     * 并生成一条来源为「收货破损」的退货记录（复用质检单的退货处置 / 退还供应商流程）。
+     */
+    private void placeDamageIntoReturnArea(WmsWarehousingEntry entry, WmsWarehousingEntryDetails detail,
+                                          int damage, Date now) {
+        // 幂等：同一明细已生成过破损退货记录就不再重复落库（重复收货时避免库存翻倍）
+        long exists = qualityCheckMapper.selectCount(new LambdaQueryWrapper<WmsQualityCheck>()
+                .eq(WmsQualityCheck::getEntryDetailsId, detail.getId())
+                .eq(WmsQualityCheck::getSource, QC_SOURCE_DAMAGE));
+        if (exists > 0) {
+            log.info("明细[{}]已存在破损退货记录，跳过重复落库", detail.getId());
+            return;
+        }
+
+        List<WmsWarehouseAreaLoca> returnLocas = listReturnLocaOptions(null, entry.getWarehouseId());
+        if (returnLocas == null || returnLocas.isEmpty()) {
+            throw new JeecgBootException("当前仓库没有可用的退货不良区货架库位，无法安置破损件");
+        }
+        WmsWarehouseAreaLoca loca = returnLocas.get(0);
+
+        String supplierName = "";
+        if (detail.getSupplierId() != null) {
+            WmsSupplier supplier = supplierMapper.selectById(detail.getSupplierId());
+            if (supplier != null && oConvertUtils.isNotEmpty(supplier.getSupplierName())) {
+                supplierName = supplier.getSupplierName();
+            }
+        }
+
+        WmsItemSku sku = skuMapper.selectById(detail.getSkuId());
+        WmsItemSpu spu = sku == null || sku.getSpuId() == null ? null : spuMapper.selectById(sku.getSpuId());
+        int unitVolume = WmsUnitConverter.skuUnitVolumeCm3(sku, spu);
+        int unitWeight = WmsUnitConverter.skuUnitWeightG(sku, spu);
+
+        String qcCode = nextCode(DAMAGE_CODE_PREFIX);
+        String returnOrderNo = nextCode(RETURN_CODE_PREFIX);
+
+        // 1. 库存：退货不良区增加不良品库存（qualityStatus = 3）
+        WmsInventoryDimension dim = new WmsInventoryDimension()
+                .setWarehouseId(loca.getWarehouseId())
+                .setWarehouseAreaId(loca.getWarehouseAreaId())
+                .setWarehouseAreaLocaId(loca.getId())
+                .setConsignorId(entry.getConsignorId())
+                .setSkuId(detail.getSkuId())
+                .setBatchNumber(detail.getBatchNumber())
+                .setQualityStatus(QUALITY_BAD)
+                .setProdDate(detail.getProdDate())
+                .setExpireDate(detail.getExpireDate());
+        String logRemark = String.format("收货清点破损入退货区：库位[%s]，供应商[%s]，破损单号[%s]，数量[%d]",
+                loca.getLocaCode(),
+                oConvertUtils.isNotEmpty(supplierName) ? supplierName : "无",
+                returnOrderNo, damage);
+        WmsInventory inventory = inventoryService.applyChange(dim, damage, 0, 0,
+                WmsInventoryBizTypeEnum.INBOUND_PUTAWAY, entry.getEntryCode(), logRemark);
+        if (inventory != null) {
+            inventoryMapper.updateUsage(inventory.getId(),
+                    countOf(inventory.getUsedVolume()) + unitVolume * damage,
+                    countOf(inventory.getUsedWeight()) + unitWeight * damage);
+        }
+        touchLocaUsage(loca.getId(), unitVolume * damage, unitWeight * damage);
+
+        // 2. 上架记录留痕（不良品 3），供明细/追溯查询
+        WmsWarehousingEntryDetailsSort sortRow = findSortRow(detail.getId());
+        entryUpMapper.insert(new WmsWarehousingEntryUp()
+                .setEntryDetailsId(detail.getId())
+                .setWarehousingEntryId(entry.getId())
+                .setSkuId(detail.getSkuId())
+                .setBatchNumber(detail.getBatchNumber())
+                .setWarehouseId(loca.getWarehouseId())
+                .setWarehouseAreaId(loca.getWarehouseAreaId())
+                .setWarehouseAreaLocaId(loca.getId())
+                .setCount(damage)
+                .setQualityStatus(QUALITY_BAD)
+                .setStrategyUsed("DAMAGE_RETURN")
+                .setRecommendLocaId(loca.getId())
+                .setIsDeviate(0)
+                .setIsOverflow(0)
+                .setDetailsSortId(sortRow != null ? sortRow.getId() : null)
+                .setStatus(UP_DONE)
+                .setCreateTime(now)
+                .setCreateBy(currentUsername())
+                .setIsDel(1));
+
+        // 3. 破损件 SN 登记为在库不良
+        registerBadSnOnReturn(detail, entry, loca.getId(), damage, entry.getWarehouseId(), now);
+
+        // 4. 生成破损退货记录（负数/不合格结论 + 已入退货区状态），
+        //    质检单页面即可联系供应商并执行「确认退还供应商」出库核减
+        qualityCheckMapper.insert(new WmsQualityCheck()
+                .setQcCode(qcCode)
+                .setWarehousingEntryId(entry.getId())
+                .setEntryDetailsId(detail.getId())
+                .setMesWorkOrderNo(entry.getMesWorkOrderNo())
+                .setSkuId(detail.getSkuId())
+                .setBatchNumber(detail.getBatchNumber())
+                .setQcType(WmsQcTypeEnum.FULL.getCode())
+                .setSource(QC_SOURCE_DAMAGE)
+                .setCheckCount(damage)
+                .setSampleCount(damage)
+                .setPassCount(0)
+                .setFailCount(damage)
+                .setFailReason("【收货破损】收货清点检出破损 " + damage + " 件")
+                .setReturnOrderNo(returnOrderNo)
+                .setReturnLocaId(loca.getId())
+                .setReturnStatus(QC_RETURN_STATUS_STORED)
+                .setReturnRemark("破损件已放置退货不良区，待联系供应商退换")
+                .setReturnHandleTime(now)
+                .setReturnHandleBy(currentUsername())
+                .setQcTime(now)
+                .setStatus(WmsQcStatusEnum.FAIL.getCode())
+                .setCreateTime(now)
+                .setCreateBy(currentUsername())
+                .setIsDel(1));
+    }
+
+    /** 退货入库时登记不良品 SN */
+    private void registerBadSnOnReturn(WmsWarehousingEntryDetails detail, WmsWarehousingEntry entry,
+                                       Integer locaId, int count, Integer warehouseId, Date now) {
+        WmsItemSku sku = skuMapper.selectById(detail.getSkuId());
+        boolean snManaged = sku != null && sku.getIsSnManaged() != null && sku.getIsSnManaged() == 1;
+        if (!snManaged) {
+            return;
+        }
+        List<WmsItemSn> pending = itemSnMapper.selectList(new LambdaQueryWrapper<WmsItemSn>()
+                .eq(WmsItemSn::getSkuId, detail.getSkuId())
+                .eq(WmsItemSn::getBatchNumber, detail.getBatchNumber())
+                .eq(WmsItemSn::getStatus, 1)
+                .isNull(WmsItemSn::getWarehouseAreaLocaId)
+                .orderByAsc(WmsItemSn::getId)
+                .last("LIMIT " + count));
+        int done = 0;
+        for (WmsItemSn sn : pending) {
+            itemSnMapper.updateById(new WmsItemSn()
+                    .setId(sn.getId())
+                    .setWarehouseId(warehouseId)
+                    .setWarehouseAreaLocaId(locaId)
+                    .setQualityStatus(QUALITY_BAD)
+                    .setStatus(SN_IN_STOCK_BAD)
+                    .setUpdateTime(now));
+            done++;
+        }
+        for (int i = done; i < count; i++) {
+            itemSnMapper.insert(new WmsItemSn()
+                    .setSnCode("BAD-" + entry.getEntryCode() + "-" + detail.getId() + "-" + (i + 1)
+                            + "-" + ThreadLocalRandom.current().nextInt(1000, 9999))
+                    .setSkuId(detail.getSkuId())
+                    .setBatchNumber(detail.getBatchNumber())
+                    .setWarehouseId(warehouseId)
+                    .setWarehouseAreaLocaId(locaId)
+                    .setQualityStatus(QUALITY_BAD)
+                    .setEntryOrderId(entry.getId())
+                    .setMesWorkOrderNo(entry.getMesWorkOrderNo())
+                    .setStatus(SN_IN_STOCK_BAD)
+                    .setCreateTime(now)
+                    .setCreateBy(currentUsername())
+                    .setIsDel(1));
+        }
+    }
+
+    /** 确认退还供应商时将 SN 状态置为已退货 */
+    private void registerReturnedSnOnShip(WmsWarehousingEntryDetails detail, WmsWarehousingEntry entry,
+                                          int count, Date now) {
+        WmsItemSku sku = skuMapper.selectById(detail.getSkuId());
+        boolean snManaged = sku != null && sku.getIsSnManaged() != null && sku.getIsSnManaged() == 1;
+        if (!snManaged) {
+            return;
+        }
+        List<WmsItemSn> badSnList = itemSnMapper.selectList(new LambdaQueryWrapper<WmsItemSn>()
+                .eq(WmsItemSn::getSkuId, detail.getSkuId())
+                .eq(WmsItemSn::getBatchNumber, detail.getBatchNumber())
+                .eq(WmsItemSn::getStatus, SN_IN_STOCK_BAD)
+                .orderByAsc(WmsItemSn::getId)
+                .last("LIMIT " + count));
+        for (WmsItemSn sn : badSnList) {
+            itemSnMapper.updateById(new WmsItemSn()
+                    .setId(sn.getId())
+                    .setStatus(SN_RETURNED)
+                    .setUpdateTime(now));
+        }
+    }
+
+    /**
+     * 检查入库单是否满足结单条件：
+     * 入库单核心关注良品入库流程，所有合格品上架完成即算入库单完成（置为 60 已完成入库）。
+     * 不合格品与破损品作为独立的退货分支异步流转（质检单/退货单负责退还供应商出库核减），互不阻塞。
+     */
+    private void checkAndCompleteEntryIfEligible(Long entryId, Date now) {
+        WmsWarehousingEntry entry = baseMapper.selectById(entryId);
+        if (entry == null || entry.getStatus() == WmsEntryStatusEnum.COMPLETED.getCode()) {
+            return;
+        }
+        List<WmsWarehousingEntryDetails> details = detailsMapper.selectList(
+                new LambdaQueryWrapper<WmsWarehousingEntryDetails>()
+                        .eq(WmsWarehousingEntryDetails::getWarehousingEntryId, entryId));
+        boolean allPassPutaway = details.stream()
+                .allMatch(d -> putawayCountOf(d.getId()) >= qcPassOf(d));
+
+        if (allPassPutaway) {
+            entry.setStatus(WmsEntryStatusEnum.COMPLETED.getCode()).setUpdateTime(now);
+            baseMapper.updateById(entry);
+        }
+    }
+
+    private JeecgBootException buildNoPutawayReason(Long entryId) {
+        List<WmsWarehousingEntryDetails> all = detailsMapper.selectList(
+                new LambdaQueryWrapper<WmsWarehousingEntryDetails>()
+                        .eq(WmsWarehousingEntryDetails::getWarehousingEntryId, entryId));
+        int totalPass = all.stream().mapToInt(this::qcPassOf).sum();
+        int totalPutaway = all.stream().mapToInt(d -> putawayCountOf(d.getId())).sum();
+        int totalFail = all.stream().mapToInt(d -> countOf(d.getQcFailCount())).sum();
+
+        if (totalPass > 0 && totalPutaway >= totalPass) {
+            if (totalFail > 0) {
+                return new JeecgBootException(String.format("本单合格品（共%d件）已全部上架完毕。剩余 %d 件不合格品，请前往「质检单」进行退货处置以完成结单",
+                        totalPass, totalFail));
+            } else {
+                return new JeecgBootException(String.format("本单合格品（共%d件）已全部上架完毕", totalPass));
+            }
+        }
+        if (totalPass == 0) {
+            if (totalFail > 0) {
+                return new JeecgBootException(String.format("本单质检无合格品（不合格 %d 件），不合格品请前往「质检单」进行退货处置", totalFail));
+            } else {
+                return new JeecgBootException("本单尚无质检合格品，请先完成质检");
+            }
+        }
+        return new JeecgBootException("本单没有可上架的合格品");
     }
 
     private String currentUsername() {

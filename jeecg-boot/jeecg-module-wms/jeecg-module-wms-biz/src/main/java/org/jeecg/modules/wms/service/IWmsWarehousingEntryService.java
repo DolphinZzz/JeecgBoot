@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import java.util.List;
 import java.util.Map;
+import org.jeecg.modules.wms.entity.WmsWarehouseAreaLoca;
 import org.jeecg.modules.wms.entity.WmsWarehousingEntry;
 import org.jeecg.modules.wms.entity.WmsWarehousingEntryUp;
 import org.jeecg.modules.wms.vo.WmsEntryCreateForm;
@@ -11,7 +12,10 @@ import org.jeecg.modules.wms.vo.WmsEntryDetailView;
 import org.jeecg.modules.wms.vo.WmsEntryPage;
 import org.jeecg.modules.wms.vo.WmsEntryQuery;
 import org.jeecg.modules.wms.vo.WmsPutawayConfirmForm;
+import org.jeecg.modules.wms.vo.WmsPutawayPage;
 import org.jeecg.modules.wms.vo.WmsPutawayPlan;
+import org.jeecg.modules.wms.vo.WmsQcReturnForm;
+import org.jeecg.modules.wms.vo.WmsQcShipReturnForm;
 import org.jeecg.modules.wms.vo.WmsQcSubmitForm;
 import org.jeecg.modules.wms.vo.WmsReceiveForm;
 
@@ -85,8 +89,23 @@ public interface IWmsWarehousingEntryService extends IService<WmsWarehousingEntr
      */
     Map<String, Object> confirmPutaway(WmsPutawayConfirmForm form);
 
-    /** 查上架记录 */
-    List<WmsWarehousingEntryUp> listPutawayRecords(Long entryId);
+    /** 查上架记录（带商品名、库位编码、推荐库位等） */
+    List<WmsPutawayPage> listPutawayRecords(Long entryId);
+
+    /**
+     * 不合格品退货处理：将不合格品分流放置到退货不良区（RETURN库位），生成退货单并记录供应商处置说明
+     */
+    Map<String, Object> handleQcReturn(WmsQcReturnForm form);
+
+    /**
+     * 确认退还供应商：供应商提货或快递发运后出库，扣减退货货架区库存
+     */
+    Map<String, Object> shipQcReturn(WmsQcShipReturnForm form);
+
+    /**
+     * 查询仓库内退货不良区（RETURN）的可用货架库位列表
+     */
+    List<WmsWarehouseAreaLoca> listReturnLocaOptions(Long qcId, Integer warehouseId);
 
     /** 取消入库单（只有未开始收货的单据可取消） */
     void cancel(Long entryId);

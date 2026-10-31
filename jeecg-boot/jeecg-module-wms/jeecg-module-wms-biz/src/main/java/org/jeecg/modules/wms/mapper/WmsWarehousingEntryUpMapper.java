@@ -1,5 +1,6 @@
 package org.jeecg.modules.wms.mapper;
 
+import java.util.List;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -21,4 +22,9 @@ public interface WmsWarehousingEntryUpMapper extends BaseMapper<WmsWarehousingEn
      * 以及推荐库位编码，方便直接看偏离情况。
      */
     IPage<WmsPutawayPage> selectPutawayPage(Page<WmsPutawayPage> page, @Param("q") WmsPutawayQuery query);
+
+    /**
+     * 按入库单ID查询上架记录清单（带出商品信息、库位编码与名称）
+     */
+    List<WmsPutawayPage> selectListByEntryId(@Param("entryId") Long entryId);
 }

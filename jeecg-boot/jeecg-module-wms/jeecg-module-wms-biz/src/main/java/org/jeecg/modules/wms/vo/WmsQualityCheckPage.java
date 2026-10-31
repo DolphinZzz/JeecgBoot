@@ -37,4 +37,25 @@ public class WmsQualityCheckPage extends WmsQualityCheck {
 
     /**该明细的实收数量，页面用来提示送检上限*/
     private Integer receivedCount;
+
+    /**供应商ID*/
+    private Long supplierId;
+
+    /**供应商名称*/
+    private String supplierName;
+
+    /**供应商联系人*/
+    private String supplierLinkName;
+
+    /**供应商联系电话*/
+    private String supplierLinkPhone;
+
+    /**供应商地址*/
+    private String supplierAddress;
+
+    /**退货货架库位编码*/
+    private String returnLocaCode;
+
+    /**退货库区名称*/
+    private String returnAreaName;
 }
