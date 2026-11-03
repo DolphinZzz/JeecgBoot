@@ -35,9 +35,6 @@ public class ErpOutboundOrderCreateDto implements Serializable {
     @Schema(description = "MES生产工单号(工业仓领料必填)")
     private String mesWorkOrderNo;
 
-    @Schema(description = "拣货模式(1摘果法 2波次播种法)，默认1")
-    private Integer pickMode;
-
     @Schema(description = "承运商/物流公司ID")
     private Long logisticsCompanyId;
 

@@ -4,7 +4,7 @@
 
     <select id="selectOutboundPage" resultType="org.jeecg.modules.wms.vo.WmsOutboundPage">
         SELECT
-            o.id, o.outbound_code, o.outbound_type, o.pick_mode, o.wave_id,
+            o.id, o.outbound_code, o.outbound_type,
             o.erp_order_no, o.mes_work_order_no, o.customer_id, o.warehouse_id, o.consignor_id,
             o.status, o.total_count, o.total_weight, o.total_volume, o.price,
             o.logistics_company_id, o.logistics_number, o.freight_fee, o.ship_time, o.ship_by,
@@ -14,7 +14,6 @@
             c.consignor_name AS consignor_name,
             cu.customer_name AS customer_name,
             lc.company_name AS logistics_company_name,
-            wv.wave_code AS wave_code,
             (SELECT COUNT(*) FROM wms_outbound_order_details d
               WHERE d.outbound_order_id = o.id AND d.is_del = 1) AS detail_rows,
             (SELECT IFNULL(SUM(d.allocated_count), 0) FROM wms_outbound_order_details d
@@ -28,16 +27,12 @@
         LEFT JOIN wms_consignor c ON c.id = o.consignor_id
         LEFT JOIN wms_customer cu ON cu.id = o.customer_id
         LEFT JOIN wms_logistics_company lc ON lc.id = o.logistics_company_id
-        LEFT JOIN wms_wave_order wv ON wv.id = o.wave_id
         WHERE o.is_del = 1
         <if test="q.outboundCode != null and q.outboundCode != ''">
             AND o.outbound_code LIKE CONCAT('%', #{q.outboundCode}, '%')
         </if>
         <if test="q.outboundType != null">
             AND o.outbound_type = #{q.outboundType}
-        </if>
-        <if test="q.pickMode != null">
-            AND o.pick_mode = #{q.pickMode}
         </if>
         <if test="q.status != null">
             AND o.status = #{q.status}
@@ -50,9 +45,6 @@
         </if>
         <if test="q.customerId != null">
             AND o.customer_id = #{q.customerId}
-        </if>
-        <if test="q.waveId != null">
-            AND o.wave_id = #{q.waveId}
         </if>
         <if test="q.erpOrderNo != null and q.erpOrderNo != ''">
             AND o.erp_order_no LIKE CONCAT('%', #{q.erpOrderNo}, '%')

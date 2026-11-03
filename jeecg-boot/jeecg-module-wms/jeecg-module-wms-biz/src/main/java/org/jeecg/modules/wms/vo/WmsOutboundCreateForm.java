@@ -38,10 +38,6 @@ public class WmsOutboundCreateForm implements Serializable {
     @Schema(description = "客户ID")
     private Long customerId;
 
-    /** 拣货模式(1摘果法 2波次播种法) */
-    @Schema(description = "拣货模式(1摘果法 2波次播种法)")
-    private Integer pickMode;
-
     /** 上游ERP单号 */
     @Schema(description = "上游ERP单号")
     private String erpOrderNo;

@@ -24,10 +24,6 @@ public class WmsOutboundQuery implements Serializable {
     @Schema(description = "出库类型(1销售出库 2MES工单领料 3采购退货 4调拨出库)")
     private Integer outboundType;
 
-    /** 拣货模式 */
-    @Schema(description = "拣货模式(1摘果法 2波次播种法)")
-    private Integer pickMode;
-
     /** 出库状态 */
     @Schema(description = "出库状态")
     private Integer status;
@@ -43,10 +39,6 @@ public class WmsOutboundQuery implements Serializable {
     /** 客户ID */
     @Schema(description = "客户ID")
     private Long customerId;
-
-    /** 波次ID */
-    @Schema(description = "波次ID")
-    private Long waveId;
 
     /** 上游ERP单号 */
     @Schema(description = "上游ERP单号")

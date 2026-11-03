@@ -240,7 +240,6 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
         WmsOutboundOrder order = new WmsOutboundOrder();
         order.setOutboundCode(outboundCode)
                 .setOutboundType(form.getOutboundType())
-                .setPickMode(form.getPickMode() != null ? form.getPickMode() : WmsPickModeEnum.PIECE_PICK.getCode())
                 .setWarehouseId(form.getWarehouseId())
                 .setConsignorId(inferredConsignorId != null ? inferredConsignorId : 1L)
                 .setCustomerId(form.getCustomerId())
@@ -337,7 +336,6 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
         form.setCustomerId(dto.getCustomerId());
         form.setErpOrderNo(dto.getErpOrderNo());
         form.setMesWorkOrderNo(dto.getMesWorkOrderNo());
-        form.setPickMode(dto.getPickMode() != null ? dto.getPickMode() : WmsPickModeEnum.PIECE_PICK.getCode());
         form.setLogisticsCompanyId(dto.getLogisticsCompanyId());
 
         List<WmsOutboundDetailForm> detailForms = new ArrayList<>();

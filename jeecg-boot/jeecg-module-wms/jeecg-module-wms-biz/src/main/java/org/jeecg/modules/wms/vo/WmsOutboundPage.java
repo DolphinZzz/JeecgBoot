@@ -33,19 +33,6 @@ public class WmsOutboundPage implements Serializable {
     @Schema(description = "出库类型")
     private Integer outboundType;
 
-    /** 拣货模式(1摘果法 2波次播种法) */
-    @Dict(dicCode = "wms_pick_mode")
-    @Schema(description = "拣货模式")
-    private Integer pickMode;
-
-    /** 波次ID */
-    @Schema(description = "波次ID")
-    private Long waveId;
-
-    /** 波次号 */
-    @Schema(description = "波次号")
-    private String waveCode;
-
     /** 上游ERP单号 */
     @Schema(description = "上游ERP单号")
     private String erpOrderNo;

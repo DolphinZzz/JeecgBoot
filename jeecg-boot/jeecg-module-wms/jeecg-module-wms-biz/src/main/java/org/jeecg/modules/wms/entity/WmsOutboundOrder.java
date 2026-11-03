@@ -45,16 +45,6 @@ public class WmsOutboundOrder implements Serializable {
     @Schema(description = "出库类型(1销售出库 2MES工单领料 3采购退货 4调拨出库)")
     private Integer outboundType;
 
-    /** 拣货模式(1摘果法 2波次播种法) */
-    @Excel(name = "拣货模式", width = 15, dicCode = "wms_pick_mode")
-    @Dict(dicCode = "wms_pick_mode")
-    @Schema(description = "拣货模式(1摘果法 2波次播种法)")
-    private Integer pickMode;
-
-    /** 波次ID */
-    @Schema(description = "波次ID")
-    private Long waveId;
-
     /** 上游ERP单号 */
     @Schema(description = "上游ERP单号")
     private String erpOrderNo;

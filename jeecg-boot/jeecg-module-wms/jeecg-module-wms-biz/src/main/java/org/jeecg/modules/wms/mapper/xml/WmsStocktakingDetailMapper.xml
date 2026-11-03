@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsStocktakingDetailMapper">
+
+    <select id="selectByOrderId" resultType="org.jeecg.modules.wms.entity.WmsStocktakingDetail">
+        SELECT *
+        FROM wms_stocktaking_detail
+        WHERE order_id = #{orderId}
+          AND is_del = 1
+        ORDER BY id ASC
+    </select>
+
+    <select id="selectSkuPageForStocktaking" resultType="org.jeecg.modules.wms.vo.WmsStocktakingSkuSelectVO">
+        SELECT
+            s.id AS id,
+            s.spu_id AS spuId,
+            s.code AS skuCode,
+            COALESCE(s.spec, s.title, '') AS skuName,
+            p.sub_title AS spuCode,
+            p.title AS spuName,
+            c.name AS categoryName,
+            p.category_id1 AS categoryId,
+            COALESCE(p.weight_unit, '件') AS unit,
+            COALESCE(s.real_price, s.price, 0.00) AS inPrice,
+            COALESCE(s.price, 0.00) AS price,
+            COALESCE(inv.book_count, 0) AS bookCount
+        FROM wms_item_sku s
+        INNER JOIN wms_item_spu p ON s.spu_id = p.id AND p.is_del = 1
+        LEFT JOIN wms_item_category c ON c.id = p.category_id1 AND c.is_del = 1
+        <if test="warehouseId != null">
+            LEFT JOIN (
+                SELECT sku_id, SUM(total_count) AS book_count
+                FROM wms_inventory
+                WHERE is_del = 1 AND warehouse_id = #{warehouseId}
+                GROUP BY sku_id
+            ) inv ON inv.sku_id = s.id
+        </if>
+        <where>
+            s.is_del = 1
+            <if test="skuCode != null and skuCode != ''">
+                AND s.code LIKE CONCAT('%', #{skuCode}, '%')
+            </if>
+            <if test="skuName != null and skuName != ''">
+                AND (s.spec LIKE CONCAT('%', #{skuName}, '%') OR s.title LIKE CONCAT('%', #{skuName}, '%'))
+            </if>
+            <if test="spuCode != null and spuCode != ''">
+                AND p.sub_title LIKE CONCAT('%', #{spuCode}, '%')
+            </if>
+            <if test="spuName != null and spuName != ''">
+                AND p.title LIKE CONCAT('%', #{spuName}, '%')
+            </if>
+            <if test="categoryId != null">
+                AND (p.category_id1 = #{categoryId} OR p.category_id2 = #{categoryId} OR p.category_id3 = #{categoryId})
+            </if>
+        </where>
+        ORDER BY s.id DESC
+    </select>
+
+    <select id="selectAllSkusInWarehouse" resultType="org.jeecg.modules.wms.vo.WmsStocktakingSkuSelectVO">
+        SELECT
+            s.id AS id,
+            s.spu_id AS spuId,
+            s.code AS skuCode,
+            COALESCE(s.spec, s.title, '') AS skuName,
+            p.sub_title AS spuCode,
+            p.title AS spuName,
+            c.name AS categoryName,
+            p.category_id1 AS categoryId,
+            COALESCE(p.weight_unit, '件') AS unit,
+            COALESCE(s.real_price, s.price, 0.00) AS inPrice,
+            COALESCE(s.price, 0.00) AS price,
+            inv.book_count AS bookCount
+        FROM (
+            SELECT sku_id, SUM(total_count) AS book_count
+            FROM wms_inventory
+            WHERE is_del = 1 AND warehouse_id = #{warehouseId}
+            GROUP BY sku_id
+        ) inv
+        INNER JOIN wms_item_sku s ON s.id = inv.sku_id AND s.is_del = 1
+        INNER JOIN wms_item_spu p ON s.spu_id = p.id AND p.is_del = 1
+        LEFT JOIN wms_item_category c ON c.id = p.category_id1 AND c.is_del = 1
+        ORDER BY s.id ASC
+    </select>
+
+</mapper>
