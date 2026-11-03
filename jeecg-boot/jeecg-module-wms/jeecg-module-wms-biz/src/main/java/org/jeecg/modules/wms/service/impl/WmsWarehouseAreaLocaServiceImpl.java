@@ -95,10 +95,12 @@ public class WmsWarehouseAreaLocaServiceImpl extends ServiceImpl<WmsWarehouseAre
         if (entity.getLocaStatus() == null) {
             entity.setLocaStatus(1); // 1 空闲
         }
-        if (entity.getAllowMixSku() == null) {
+        // 存储区(STORAGE)与拣货区(PICKING)遵循「一库位一绑定SKU至多一批次」，严格禁止混放；退货不良区(RETURN)允许混放
+        if ("RETURN".equalsIgnoreCase(area.getCategory())) {
+            entity.setAllowMixSku(1);
+            entity.setAllowMixBatch(1);
+        } else {
             entity.setAllowMixSku(0);
-        }
-        if (entity.getAllowMixBatch() == null) {
             entity.setAllowMixBatch(0);
         }
         if (entity.getUsedVolume() == null) {

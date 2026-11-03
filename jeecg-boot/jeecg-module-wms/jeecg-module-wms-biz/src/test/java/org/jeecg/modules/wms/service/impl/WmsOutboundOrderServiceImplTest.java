@@ -96,10 +96,10 @@ public class WmsOutboundOrderServiceImplTest {
         form.setOutboundType(WmsOutboundTypeEnum.MES_WORK_ORDER.getCode());
         form.setConsignorId(1L);
         form.setMesWorkOrderNo(""); // 未传工单号
-        form.setDetails(Collections.singletonList(new WmsOutboundDetailForm().setSkuId(10L).setOutCount(5)));
+        form.setDetails(Collections.singletonList(new WmsOutboundDetailForm().setSkuId(10L).setWarehouseAreaLocaId(101).setOutCount(5)));
 
         JeecgBootException ex = assertThrows(JeecgBootException.class, () -> outboundOrderService.createOutboundOrder(form));
-        assertTrue(ex.getMessage().contains("工业制造仓的 MES 工单领料出库必须绑定生产工单号"));
+        assertTrue(ex.getMessage().contains("MES工单领料出库必须录入MES生产工单号"));
     }
 
     @Test
@@ -116,10 +116,112 @@ public class WmsOutboundOrderServiceImplTest {
         form.setOutboundType(WmsOutboundTypeEnum.SALE.getCode());
         form.setConsignorId(1L);
         form.setCustomerId(null); // 未选客户
-        form.setDetails(Collections.singletonList(new WmsOutboundDetailForm().setSkuId(10L).setOutCount(5)));
+        form.setDetails(Collections.singletonList(new WmsOutboundDetailForm().setSkuId(10L).setWarehouseAreaLocaId(101).setOutCount(5)));
 
         JeecgBootException ex = assertThrows(JeecgBootException.class, () -> outboundOrderService.createOutboundOrder(form));
         assertTrue(ex.getMessage().contains("销售出库必须选择客户"));
+    }
+
+    @Test
+    @DisplayName("调拨出库类型应被系统拦截拒绝")
+    void testCreateOutbound_TransferType_ShouldThrow() {
+        WmsOutboundCreateForm form = new WmsOutboundCreateForm();
+        form.setWarehouseId(1);
+        form.setOutboundType(4); // 调拨出库
+
+        JeecgBootException ex = assertThrows(JeecgBootException.class, () -> outboundOrderService.createOutboundOrder(form));
+        assertTrue(ex.getMessage().contains("不支持的出库类型"));
+    }
+
+    @Test
+    @DisplayName("手工建单未指定出库库位应被拦截")
+    void testCreateOutbound_WithoutLoca_ShouldThrow() {
+        WmsWarehouse warehouse = new WmsWarehouse().setId(1).setName("标准仓").setWarehouseType("NORMAL");
+        when(warehouseService.getById(1)).thenReturn(warehouse);
+
+        WmsOutboundCreateForm form = new WmsOutboundCreateForm();
+        form.setWarehouseId(1);
+        form.setOutboundType(WmsOutboundTypeEnum.SALE.getCode());
+        form.setCustomerId(10L);
+        form.setDetails(Collections.singletonList(new WmsOutboundDetailForm().setSkuId(10L).setWarehouseAreaLocaId(null).setOutCount(5)));
+
+        JeecgBootException ex = assertThrows(JeecgBootException.class, () -> outboundOrderService.createOutboundOrder(form));
+        assertTrue(ex.getMessage().contains("未指定出库库位"));
+    }
+
+    @Test
+    @DisplayName("手工建单出库数超出库位可用库存时硬约束拦截")
+    void testCreateOutbound_ExceedAvailableStock_ShouldThrow() {
+        WmsWarehouse warehouse = new WmsWarehouse().setId(1).setName("标准仓").setWarehouseType("NORMAL");
+        when(warehouseService.getById(1)).thenReturn(warehouse);
+
+        WmsWarehouseAreaLoca loca = new WmsWarehouseAreaLoca();
+        loca.setId(101);
+        loca.setLocaCode("A-01-01");
+        when(locaMapper.selectById(101)).thenReturn(loca);
+
+        // 库位可用库存仅 10 件
+        WmsInventory inv = new WmsInventory()
+                .setId(1L)
+                .setWarehouseId(1)
+                .setWarehouseAreaId(1)
+                .setWarehouseAreaLocaId(101)
+                .setConsignorId(1L)
+                .setSkuId(10L)
+                .setBatchNumber("BATCH_01")
+                .setQualityStatus(1)
+                .setAvailableCount(10);
+        when(inventoryMapper.selectList(any())).thenReturn(Collections.singletonList(inv));
+
+        WmsOutboundCreateForm form = new WmsOutboundCreateForm();
+        form.setWarehouseId(1);
+        form.setOutboundType(WmsOutboundTypeEnum.SALE.getCode());
+        form.setCustomerId(10L);
+        form.setDetails(Collections.singletonList(
+                new WmsOutboundDetailForm().setSkuId(10L).setWarehouseAreaLocaId(101).setOutCount(20) // 申请 20 件 > 10 件
+        ));
+
+        JeecgBootException ex = assertThrows(JeecgBootException.class, () -> outboundOrderService.createOutboundOrder(form));
+        assertTrue(ex.getMessage().contains("可用库存不足"));
+    }
+
+    @Test
+    @DisplayName("手工建单指定合规库位成功：单头状态为20已分配且原子预占锁库")
+    void testCreateOutbound_Success_AutoLockAndStatus20() {
+        WmsWarehouse warehouse = new WmsWarehouse().setId(1).setName("标准仓").setWarehouseType("NORMAL");
+        when(warehouseService.getById(1)).thenReturn(warehouse);
+
+        WmsInventory inv = new WmsInventory()
+                .setId(1L)
+                .setWarehouseId(1)
+                .setWarehouseAreaId(1)
+                .setWarehouseAreaLocaId(101)
+                .setConsignorId(2L)
+                .setSkuId(10L)
+                .setBatchNumber("BATCH_01")
+                .setQualityStatus(1)
+                .setAvailableCount(50);
+        when(inventoryMapper.selectList(any())).thenReturn(Collections.singletonList(inv));
+
+        WmsOutboundCreateForm form = new WmsOutboundCreateForm();
+        form.setWarehouseId(1);
+        form.setOutboundType(WmsOutboundTypeEnum.MES_WORK_ORDER.getCode());
+        form.setMesWorkOrderNo("WO-20261102-01");
+        form.setDetails(Collections.singletonList(
+                new WmsOutboundDetailForm().setSkuId(10L).setWarehouseAreaLocaId(101).setOutCount(5)
+        ));
+
+        WmsOutboundOrder created = outboundOrderService.createOutboundOrder(form);
+        assertNotNull(created);
+        assertEquals(WmsOutboundStatusEnum.ALLOCATED.getCode(), created.getStatus()); // 状态 20
+        assertEquals(2L, created.getConsignorId()); // 自动推导货主 2L
+        assertEquals("WO-20261102-01", created.getMesWorkOrderNo());
+
+        // 验证调用了原子预占锁库
+        verify(inventoryService).applyChange(
+                argThat(dim -> dim.getWarehouseAreaLocaId() == 101 && dim.getSkuId() == 10L && dim.getConsignorId() == 2L),
+                eq(0), eq(5), eq(0),
+                eq(WmsInventoryBizTypeEnum.LOCK), any(), any());
     }
 
     @Test
@@ -355,9 +457,135 @@ public class WmsOutboundOrderServiceImplTest {
         assertNull(sn.getOutboundOrderId());
         // 验证生成取消返架单（operation_type = 4）
         verify(operationsMapper).insert(argThat((WmsWarehouseOperations op) -> op.getOperationType() == 4));
-        verify(operationsDetailsMapper).insert(argThat((WmsWarehouseOperationsDetails d) -> d.getSourceCount() == 10));
+        verify(operationsDetailsMapper).insert(argThat((WmsWarehouseOperationsDetails d) -> d.getSourceCount() == 10 && d.getCategory() == 1 && d.getConsignorId() == 1L));
         // 单据状态为 91 已取消
         assertEquals(WmsOutboundStatusEnum.CANCELLED.getCode(), order.getStatus());
+        assertEquals(0, detail.getAllocatedCount());
+    }
+
+    @Test
+    @DisplayName("逆向取消：待发货状态无货主场景(OB202611020002)取消出库应安全生成返架作业并兜底货主与category")
+    void testCancelOutbound_ReadyToShip_WithoutConsignor_GenerateReturnJob() {
+        Long orderId = 102L;
+        WmsOutboundOrder order = new WmsOutboundOrder()
+                .setId(orderId)
+                .setOutboundCode("OB202611020002")
+                .setWarehouseId(1)
+                .setConsignorId(null) // 无手工货主
+                .setStatus(WmsOutboundStatusEnum.PACKED.getCode()) // 70 已打包待发货
+                .setTotalCount(45)
+                .setIsDel(1);
+        when(outboundOrderMapper.selectById(orderId)).thenReturn(order);
+
+        WmsOutboundOrderDetails detail = new WmsOutboundOrderDetails()
+                .setId(202L)
+                .setOutboundOrderId(orderId)
+                .setSkuId(18L)
+                .setTargetWarehouseAreaId(1)
+                .setTargetWarehouseAreaLocaId(2)
+                .setBatchNumber("BAT20261101B")
+                .setConsignorId(null) // 明细无货主
+                .setAllocatedCount(45)
+                .setPickedCount(45)
+                .setIsDel(1);
+        when(outboundOrderDetailsMapper.selectList(any())).thenReturn(Collections.singletonList(detail));
+
+        outboundOrderService.cancelOutboundOrder(orderId, "取消整单重拣");
+
+        // 验证锁库释放
+        verify(inventoryService).applyChange(
+                argThat(dim -> dim.getConsignorIdOrDefault() == 0L && dim.getWarehouseAreaLocaId() == 2),
+                eq(0), eq(-45), eq(0), eq(WmsInventoryBizTypeEnum.UNLOCK), any(), any());
+
+        // 验证生成取消返架作业单与明细完整性约束
+        verify(operationsMapper).insert(argThat((WmsWarehouseOperations op) ->
+                op.getOperationType() == 4
+                        && op.getCategory() == 1
+                        && op.getWarehouseId() == 1
+                        && op.getJobCode().startsWith("RET")));
+
+        verify(operationsDetailsMapper).insert(argThat((WmsWarehouseOperationsDetails d) ->
+                d.getSourceCount() == 45
+                        && d.getTargetCount() == 45
+                        && d.getCategory() == 1
+                        && d.getQualityStatus() == 1
+                        && d.getConsignorId() == 0L));
+
+        // 单据状态流转至 91
+        assertEquals(WmsOutboundStatusEnum.CANCELLED.getCode(), order.getStatus());
+        assertEquals(0, detail.getAllocatedCount());
+    }
+
+    @Test
+    @DisplayName("出库复核：整单快速复核通过(无需明细行列表)推进至60待打包")
+    void testConfirmReview_WithoutReviewLines_Pass_ShouldAdvanceTo60() {
+        Long orderId = 100L;
+        WmsOutboundOrder order = new WmsOutboundOrder()
+                .setId(orderId)
+                .setOutboundCode("OB202611020002")
+                .setStatus(WmsOutboundStatusEnum.WAIT_REVIEW.getCode()) // 50 待复核
+                .setIsDel(1);
+        when(outboundOrderMapper.selectById(orderId)).thenReturn(order);
+
+        WmsOutboundOrderDetails detail = new WmsOutboundOrderDetails()
+                .setId(201L)
+                .setOutboundOrderId(orderId)
+                .setSkuId(10L)
+                .setAllocatedCount(45)
+                .setPickedCount(45)
+                .setIsDel(1);
+        when(outboundOrderDetailsMapper.selectList(any())).thenReturn(Collections.singletonList(detail));
+
+        WmsReviewConfirmForm form = new WmsReviewConfirmForm();
+        form.setOutboundOrderId(orderId);
+        form.setReviewStatus(1); // 1 复核通过
+        form.setReviewRemark("商品完好，数量核对一致");
+        form.setReviewLines(null); // 前端未传明细行列表
+
+        outboundOrderService.confirmReview(form);
+
+        // 验证明细状态与复核数量
+        assertEquals(1, detail.getReviewStatus());
+        assertEquals(45, detail.getReviewCount());
+        verify(outboundOrderDetailsMapper).updateById(detail);
+
+        // 验证单据状态推进至 60 复核通过待打包
+        assertEquals(WmsOutboundStatusEnum.REVIEWED.getCode(), order.getStatus());
+    }
+
+    @Test
+    @DisplayName("出库复核：整单复核异常时流转至92异常挂起")
+    void testConfirmReview_WithoutReviewLines_Reject_ShouldAdvanceTo92() {
+        Long orderId = 100L;
+        WmsOutboundOrder order = new WmsOutboundOrder()
+                .setId(orderId)
+                .setOutboundCode("OB202611020002")
+                .setStatus(WmsOutboundStatusEnum.WAIT_REVIEW.getCode())
+                .setIsDel(1);
+        when(outboundOrderMapper.selectById(orderId)).thenReturn(order);
+
+        WmsOutboundOrderDetails detail = new WmsOutboundOrderDetails()
+                .setId(201L)
+                .setOutboundOrderId(orderId)
+                .setSkuId(10L)
+                .setAllocatedCount(45)
+                .setPickedCount(45)
+                .setIsDel(1);
+        when(outboundOrderDetailsMapper.selectList(any())).thenReturn(Collections.singletonList(detail));
+
+        WmsReviewConfirmForm form = new WmsReviewConfirmForm();
+        form.setOutboundOrderId(orderId);
+        form.setReviewStatus(2); // 2 复核异常
+        form.setReviewRemark("外包装破损破漏");
+
+        outboundOrderService.confirmReview(form);
+
+        // 验证明细状态为 2 不通过
+        assertEquals(2, detail.getReviewStatus());
+        assertEquals(0, detail.getReviewCount());
+
+        // 验证单据状态推进至 92 异常挂起
+        assertEquals(WmsOutboundStatusEnum.EXCEPTION_SUSPEND.getCode(), order.getStatus());
     }
 
     @Test
@@ -371,5 +599,168 @@ public class WmsOutboundOrderServiceImplTest {
 
         JeecgBootException ex = assertThrows(JeecgBootException.class, () -> outboundOrderService.cancelOutboundOrder(orderId, "退货"));
         assertTrue(ex.getMessage().contains("出库单已发运出库"));
+    }
+
+    @Test
+    @DisplayName("打包称重：根据商品单重与实拣件数核算并推进至70待发货")
+    void testPackageAndWeigh_WithWeightsList_ShouldUpdateStatusAndTotalWeight() {
+        Long orderId = 100L;
+        WmsOutboundOrder order = new WmsOutboundOrder()
+                .setId(orderId)
+                .setOutboundCode("OB202611020002")
+                .setStatus(WmsOutboundStatusEnum.REVIEWED.getCode()) // 60 复核通过待打包
+                .setIsDel(1);
+        when(outboundOrderMapper.selectById(orderId)).thenReturn(order);
+
+        WmsOutboundOrderDetails detail = new WmsOutboundOrderDetails()
+                .setId(201L)
+                .setOutboundOrderId(orderId)
+                .setSkuId(18L)
+                .setAllocatedCount(45)
+                .setPickedCount(45)
+                .setIsDel(1);
+        when(outboundOrderDetailsMapper.selectList(any())).thenReturn(Collections.singletonList(detail));
+
+        WmsItemSku sku = new WmsItemSku().setId(18L).setSpuId(2L).setCode("SKU018").setProductWeight(340);
+        WmsItemSpu spu = new WmsItemSpu().setId(2L).setTitle("纯棉卫衣").setWeightUnit("g");
+        when(itemSkuMapper.selectById(18L)).thenReturn(sku);
+        when(itemSpuMapper.selectById(2L)).thenReturn(spu);
+
+        WmsPackageWeightForm form = new WmsPackageWeightForm();
+        form.setOutboundOrderId(orderId);
+        form.setActualWeightKg(15.600); // 15.3kg 净重 + 0.3kg 纸箱皮重
+
+        WmsPackageWeightForm.WmsWeightBoxItem box = new WmsPackageWeightForm.WmsWeightBoxItem();
+        box.setPackageCode("OB202611020002-BOX01");
+        box.setPackageType("纸箱");
+        box.setPackageCount(45);
+        box.setActualWeight(15.600);
+        box.setTheoreticalWeight(15.600);
+        box.setDiffWeight(0.0);
+        form.setWeights(Collections.singletonList(box));
+
+        outboundOrderService.packageAndWeigh(form);
+
+        // 验证单据状态推进至 70 待发货
+        assertEquals(WmsOutboundStatusEnum.PACKED.getCode(), order.getStatus());
+        assertEquals(15600, order.getTotalWeight()); // 15600 克
+        verify(outboundOrderWeightsMapper).insert(any(WmsOutboundOrderWeights.class));
+        verify(outboundOrderPackageMapper).insert(any(WmsOutboundOrderPackage.class));
+    }
+
+    @Test
+    @DisplayName("明细列表：应正确转换并计算单件千克单重")
+    void testListDetails_ShouldComputeUnitWeightAndKg() {
+        Long orderId = 100L;
+        WmsOutboundDetailView view = new WmsOutboundDetailView();
+        view.setId(201L);
+        view.setSkuId(18L);
+        view.setPickedCount(45);
+        view.setProductWeight(340);
+        view.setWeightUnit("g");
+
+        when(outboundOrderDetailsMapper.selectDetailViewsByOrderId(orderId)).thenReturn(Collections.singletonList(view));
+
+        List<WmsOutboundDetailView> result = outboundOrderService.listDetails(orderId);
+
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals(340, result.get(0).getUnitWeightG());
+        assertEquals(0.34, result.get(0).getUnitWeightKg());
+    }
+
+    @Test
+    @DisplayName("发货确认：应持久化物流运费、发货人与发运时间并推进至80已发货")
+    void testConfirmShip_ShouldPersistFreightFeeAndShipTime() {
+        Long orderId = 100L;
+        WmsOutboundOrder order = new WmsOutboundOrder()
+                .setId(orderId)
+                .setOutboundCode("OB202611020003")
+                .setStatus(WmsOutboundStatusEnum.PACKED.getCode()) // 70 已打包待发货
+                .setWarehouseId(1)
+                .setConsignorId(1L)
+                .setIsDel(1);
+        when(outboundOrderMapper.selectById(orderId)).thenReturn(order);
+
+        WmsOutboundOrderDetails detail = new WmsOutboundOrderDetails()
+                .setId(301L)
+                .setOutboundOrderId(orderId)
+                .setSkuId(18L)
+                .setTargetWarehouseAreaId(1)
+                .setTargetWarehouseAreaLocaId(2)
+                .setAllocatedCount(45)
+                .setPickedCount(45)
+                .setBatchNumber("20261101")
+                .setIsDel(1);
+        when(outboundOrderDetailsMapper.selectList(any())).thenReturn(Collections.singletonList(detail));
+        when(itemSnMapper.selectList(any())).thenReturn(Collections.emptyList());
+
+        WmsShipConfirmForm form = new WmsShipConfirmForm();
+        form.setOutboundOrderId(orderId);
+        form.setLogisticsCompanyId(2L);
+        form.setLogisticsNumber("SF1234567890");
+        form.setFreightFee(35.50);
+
+        outboundOrderService.confirmShip(form);
+
+        // 验证单据状态推进至 80 已发货
+        assertEquals(WmsOutboundStatusEnum.SHIPPED.getCode(), order.getStatus());
+        assertEquals(2L, order.getLogisticsCompanyId());
+        assertEquals("SF1234567890", order.getLogisticsNumber());
+        assertEquals(35.50, order.getFreightFee());
+        assertNotNull(order.getShipTime());
+        verify(outboundOrderMapper).updateById(order);
+    }
+
+    @Test
+    @DisplayName("箱单与称重及SN查询：验证数据正确关联并填充商品属性")
+    void testListPackagesAndWeightsAndSns() {
+        Long orderId = 100L;
+
+        // 1. 测试包装箱单
+        WmsOutboundOrderPackage pkg = new WmsOutboundOrderPackage()
+                .setId(1L)
+                .setOutboundOrderId(orderId)
+                .setPackageCode("OB-BOX01")
+                .setPackageType("纸箱")
+                .setPackageCount(45)
+                .setSkuId(18L);
+        when(outboundOrderPackageMapper.selectList(any())).thenReturn(Collections.singletonList(pkg));
+        WmsItemSku sku = new WmsItemSku().setId(18L).setCode("SKU018").setTitle("卫衣L码");
+        when(itemSkuMapper.selectById(18L)).thenReturn(sku);
+
+        List<WmsOutboundOrderPackage> packages = outboundOrderService.listPackages(orderId);
+        assertEquals(1, packages.size());
+        assertEquals("SKU018", packages.get(0).getSkuCode());
+        assertEquals("卫衣L码", packages.get(0).getSkuName());
+
+        // 2. 测试称重记录
+        WmsOutboundOrderWeights weights = new WmsOutboundOrderWeights()
+                .setId(1L)
+                .setOutboundOrderId(orderId)
+                .setPackageCode("OB-BOX01")
+                .setActualWeight(15.6)
+                .setTheoreticalWeight(15.6)
+                .setDiffWeight(0.0);
+        when(outboundOrderWeightsMapper.selectList(any())).thenReturn(Collections.singletonList(weights));
+
+        List<WmsOutboundOrderWeights> weightList = outboundOrderService.listWeights(orderId);
+        assertEquals(1, weightList.size());
+        assertEquals(15.6, weightList.get(0).getActualWeight());
+
+        // 3. 测试SN追溯明细
+        WmsItemSn sn = new WmsItemSn()
+                .setId(1L)
+                .setOutboundOrderId(orderId)
+                .setSnCode("SN20261102001")
+                .setSkuId(18L)
+                .setStatus(5);
+        when(itemSnMapper.selectList(any())).thenReturn(Collections.singletonList(sn));
+
+        List<WmsItemSn> snList = outboundOrderService.listSns(orderId);
+        assertEquals(1, snList.size());
+        assertEquals("SN20261102001", snList.get(0).getSnCode());
+        assertEquals("SKU018", snList.get(0).getSkuCode());
+        assertEquals("卫衣L码", snList.get(0).getSkuName());
     }
 }

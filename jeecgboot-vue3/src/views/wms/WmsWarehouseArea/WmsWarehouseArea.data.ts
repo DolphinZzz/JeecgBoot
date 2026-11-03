@@ -1,3 +1,5 @@
+import { h } from 'vue';
+import { Tag } from 'ant-design-vue';
 import { BasicColumn, FormSchema } from '/@/components/Table';
 
 // 列表列定义
@@ -5,39 +7,68 @@ export const columns: BasicColumn[] = [
   {
     title: '所属仓库',
     align: 'center',
+    width: 140,
     dataIndex: 'warehouseId_dictText',
   },
   {
     title: '库区名称',
-    align: 'center',
+    align: 'left',
+    width: 160,
     dataIndex: 'name',
+    customRender: ({ text }) => h('span', { style: { fontWeight: 'bold', color: '#1890ff' } }, text),
   },
   {
     title: '库区类别',
     align: 'center',
+    width: 120,
     dataIndex: 'category_dictText',
   },
   {
     title: '存储条件',
     align: 'center',
+    width: 100,
     dataIndex: 'storageCondition_dictText',
     customRender: ({ text }) => text || '常温',
   },
   {
+    title: '总库位数',
+    align: 'center',
+    width: 95,
+    dataIndex: 'totalLocaCount',
+    customRender: ({ text }) => h('span', { style: { fontWeight: 'bold' } }, `${text ?? 0}`),
+  },
+  {
+    title: '空闲库位',
+    align: 'center',
+    width: 110,
+    dataIndex: 'emptyLocaCount',
+    customRender: ({ text }) => h(Tag, { color: 'green' }, () => `${text ?? 0} 空闲`),
+  },
+  {
+    title: '占用库位',
+    align: 'center',
+    width: 110,
+    dataIndex: 'occupiedLocaCount',
+    customRender: ({ text }) => h(Tag, { color: (text && text > 0) ? 'orange' : 'default' }, () => `${text ?? 0} 占用`),
+  },
+  {
+    title: '在库总件数',
+    align: 'center',
+    width: 110,
+    dataIndex: 'totalItemCount',
+    customRender: ({ text }) => h('span', { style: { fontWeight: 'bold', color: '#1890ff' } }, `${text ?? 0} 件`),
+  },
+  {
     title: 'ABC分类',
     align: 'center',
+    width: 90,
     dataIndex: 'abcClass_dictText',
     customRender: ({ text }) => text || '-',
   },
   {
-    title: '分区类型',
-    align: 'center',
-    dataIndex: 'zoneType_dictText',
-    customRender: ({ text }) => text || '通用区',
-  },
-  {
     title: '创建时间',
     align: 'center',
+    width: 160,
     dataIndex: 'createTime',
   },
 ];
@@ -68,16 +99,6 @@ export const searchFormSchema: FormSchema[] = [
     componentProps: {
       dictCode: 'wms_warehouse_area_category',
       placeholder: '请选择类别',
-    },
-    colProps: { span: 6 },
-  },
-  {
-    label: '分区类型',
-    field: 'zoneType',
-    component: 'JDictSelectTag',
-    componentProps: {
-      dictCode: 'wms_zone_type',
-      placeholder: '请选择分区',
     },
     colProps: { span: 6 },
   },
@@ -142,21 +163,10 @@ export const formSchema: FormSchema[] = [
       placeholder: '可选ABC分类',
     },
   },
-  {
-    label: '分区类型',
-    field: 'zoneType',
-    component: 'JDictSelectTag',
-    defaultValue: 'GENERAL',
-    componentProps: {
-      dictCode: 'wms_zone_type',
-      placeholder: '请选择分区类型',
-    },
-  },
 ];
 
 export const superQuerySchema = {
   warehouseId: { title: '所属仓库', order: 1, view: 'list', type: 'number', dictTable: 'wms_warehouse', dicText: 'name', dicCode: 'id' },
   name: { title: '库区名称', order: 2, view: 'text', type: 'string' },
   category: { title: '库区类别', order: 3, view: 'list', type: 'string', dictCode: 'wms_warehouse_area_category' },
-  zoneType: { title: '分区类型', order: 4, view: 'list', type: 'string', dictCode: 'wms_zone_type' },
 };

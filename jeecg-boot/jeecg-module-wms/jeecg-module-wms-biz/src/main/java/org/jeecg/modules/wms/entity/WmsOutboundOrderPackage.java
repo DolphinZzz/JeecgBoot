@@ -3,6 +3,7 @@ package org.jeecg.modules.wms.entity;
 import java.io.Serializable;
 import java.util.Date;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -36,6 +37,10 @@ public class WmsOutboundOrderPackage implements Serializable {
     @Schema(description = "打包单号/箱号")
     private String packageCode;
 
+    /** 包装类型 */
+    @Schema(description = "包装类型")
+    private String packageType;
+
     /** 出库单ID */
     @Schema(description = "出库单ID")
     private Long outboundOrderId;
@@ -47,6 +52,16 @@ public class WmsOutboundOrderPackage implements Serializable {
     /** 规格ID */
     @Schema(description = "规格ID")
     private Long skuId;
+
+    /** 商品编码 */
+    @TableField(exist = false)
+    @Schema(description = "商品编码")
+    private String skuCode;
+
+    /** 商品名称 */
+    @TableField(exist = false)
+    @Schema(description = "商品名称")
+    private String skuName;
 
     /** 打包数量 */
     @Schema(description = "打包数量")
@@ -89,5 +104,5 @@ public class WmsOutboundOrderPackage implements Serializable {
     /** 是否删除 1未删除 2已删除 */
     @TableLogic(value = "1", delval = "2")
     @Schema(description = "是否删除 1未删除 2已删除")
-    private Integer isDel;
+    private Integer isDel = 1;
 }

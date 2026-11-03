@@ -8,14 +8,30 @@ export const columns: BasicColumn[] = [
   {
     title: '作业单号',
     align: 'center',
-    width: 190,
+    width: 180,
     dataIndex: 'jobCode',
   },
   {
-    title: '所属仓库',
+    title: '调出仓库',
     align: 'center',
-    width: 120,
+    width: 130,
     dataIndex: 'warehouseId_dictText',
+    customRender: ({ text }) => text || '-',
+  },
+  {
+    title: '调入仓库',
+    align: 'center',
+    width: 140,
+    dataIndex: 'targetWarehouseId',
+    customRender: ({ record }) => {
+      const srcId = record.warehouseId;
+      const tgtId = record.targetWarehouseId || srcId;
+      const tgtName = record.targetWarehouseId_dictText || record.warehouseId_dictText || '-';
+      if (srcId && tgtId && srcId !== tgtId) {
+        return h(Tag, { color: 'blue' }, () => `跨仓 ➔ ${tgtName}`);
+      }
+      return h(Tag, { color: 'default' }, () => `同仓 (${tgtName})`);
+    },
   },
   {
     title: '作业来源',
@@ -66,13 +82,24 @@ export const searchFormSchema: FormSchema[] = [
     colProps: { span: 6 },
   },
   {
-    label: '仓库',
+    label: '调出仓库',
     field: 'warehouseId',
     component: 'JDictSelectTag',
     componentProps: {
       dictCode: 'wms_warehouse,name,id',
       stringToNumber: true,
-      placeholder: '请选择仓库',
+      placeholder: '请选择调出仓库',
+    },
+    colProps: { span: 6 },
+  },
+  {
+    label: '调入仓库',
+    field: 'targetWarehouseId',
+    component: 'JDictSelectTag',
+    componentProps: {
+      dictCode: 'wms_warehouse,name,id',
+      stringToNumber: true,
+      placeholder: '请选择调入仓库',
     },
     colProps: { span: 6 },
   },
@@ -92,23 +119,37 @@ export const searchFormSchema: FormSchema[] = [
 // 新建移库单的表头
 export const formSchema: FormSchema[] = [
   {
-    label: '所属仓库',
+    label: '调出仓库',
     field: 'warehouseId',
     component: 'JDictSelectTag',
     required: true,
+    helpMessage: '货物移出的来源仓库',
     componentProps: {
       dictCode: 'wms_warehouse,name,id',
       stringToNumber: true,
-      placeholder: '请选择仓库',
+      placeholder: '请选择调出仓库',
     },
-    colProps: { span: 12 },
+    colProps: { span: 8 },
+  },
+  {
+    label: '调入仓库',
+    field: 'targetWarehouseId',
+    component: 'JDictSelectTag',
+    required: true,
+    helpMessage: '货物移入的目标仓库；与调出仓库相同为仓内移位，不同则为跨仓调拨',
+    componentProps: {
+      dictCode: 'wms_warehouse,name,id',
+      stringToNumber: true,
+      placeholder: '请选择调入仓库',
+    },
+    colProps: { span: 8 },
   },
   {
     label: '备注',
     field: 'remark',
     component: 'Input',
-    componentProps: { placeholder: '如：整箱移位、库位整理', maxlength: 200 },
-    colProps: { span: 12 },
+    componentProps: { placeholder: '如：跨仓调拨、库位整理', maxlength: 200 },
+    colProps: { span: 8 },
   },
 ];
 
@@ -185,13 +226,14 @@ export const detailColumns: JVxeColumn[] = [
 
 // 作业明细展示列（详情弹窗）
 export const detailViewColumns: BasicColumn[] = [
-  { title: '商品信息', align: 'left', width: 250, ellipsis: true, dataIndex: 'skuId_dictText' },
+  { title: '商品信息', align: 'left', width: 230, ellipsis: true, dataIndex: 'skuId_dictText' },
   { title: '批次号', align: 'center', width: 130, dataIndex: 'batchNumber' },
-  { title: '货主', align: 'center', width: 140, dataIndex: 'consignorId_dictText' },
-  { title: '质量状态', align: 'center', width: 100, dataIndex: 'qualityStatus_dictText' },
-  { title: '移出库区', align: 'center', width: 130, dataIndex: 'sourceWarehouseAreaId_dictText' },
+  { title: '货主', align: 'center', width: 130, dataIndex: 'consignorId_dictText' },
+  { title: '质量状态', align: 'center', width: 90, dataIndex: 'qualityStatus_dictText' },
+  { title: '移出库区', align: 'center', width: 120, dataIndex: 'sourceWarehouseAreaId_dictText' },
   { title: '移出库位', align: 'center', width: 130, dataIndex: 'sourceWarehouseAreaLocaId_dictText' },
-  { title: '移入库区', align: 'center', width: 130, dataIndex: 'targetWarehouseAreaId_dictText' },
+  { title: '移入仓库', align: 'center', width: 120, dataIndex: 'targetWarehouseId_dictText' },
+  { title: '移入库区', align: 'center', width: 120, dataIndex: 'targetWarehouseAreaId_dictText' },
   { title: '移入库位', align: 'center', width: 130, dataIndex: 'targetWarehouseAreaLocaId_dictText' },
-  { title: '数量', align: 'center', width: 90, dataIndex: 'sourceCount' },
+  { title: '数量', align: 'center', width: 80, dataIndex: 'sourceCount' },
 ];

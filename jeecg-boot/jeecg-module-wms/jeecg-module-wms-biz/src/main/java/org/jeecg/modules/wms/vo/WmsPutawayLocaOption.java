@@ -47,12 +47,6 @@ public class WmsPutawayLocaOption {
     /**库区类型中文（收货暂存/待检/存储/拣货/退货不良/集货待发）*/
     private String areaCategoryText;
 
-    /**库区分区(GENERAL/SMALL/LARGE/VALUABLE)*/
-    private String zoneType;
-
-    /**库区分区中文*/
-    private String zoneTypeText;
-
     /**生效存储条件（库位优先，其次库区）*/
     private String storageCondition;
 
@@ -96,13 +90,52 @@ public class WmsPutawayLocaOption {
     private Integer remainWeight;
 
     /**
-     * 剩余可上架件数：min(⌊剩余容积/单件体积⌋, ⌊剩余承重/单件重量⌋)。
-     * 未指定商品或商品未维护体积重量时为 null 表示无法估算。
+     * 剩余可上架件数：基于库位-商品规划（maxCount - usedCount）。
+     * 未规划或放满时为 0。
      */
     private Integer remainCount;
 
+    /** 规划商品SPU ID */
+    private Long spuId;
+
+    /** 规划商品SPU名称 */
+    private String spuName;
+
+    /** 规划商品SPU编码 */
+    private String spuCode;
+
+    /** 规划最大可存放件数 */
+    private Integer maxCount;
+
+    /** 当前在库已用件数 */
+    private Integer usedCount;
+
+    /** 库位利用率(0.0 ~ 100.0) */
+    private Double usageRate;
+
+    /** 容量状态(EMPTY/PARTIAL/FULL) */
+    private String capacityStatus;
+
+    /** 容量状态中文(空闲/部分占用/已放满) */
+    private String capacityStatusText;
+
+    /** 规划绑定摘要 */
+    private String boundSummary;
+
     /**固定库位绑定的SKU，为空表示非固定库位*/
     private Long fixedSkuId;
+
+    /**当前在库批次号*/
+    private String batchNumber;
+
+    /**当前在库可用数量*/
+    private Integer availableCount;
+
+    /**绑定SKU规格编码*/
+    private String skuCode;
+
+    /**绑定SKU规格名称/描述*/
+    private String skuName;
 
     /**是否通过硬过滤：false 时仍可选（强制上架要填原因），但页面上标红提示*/
     private boolean allowed;

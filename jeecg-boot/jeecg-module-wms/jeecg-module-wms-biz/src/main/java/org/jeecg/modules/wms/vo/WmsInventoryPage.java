@@ -29,6 +29,9 @@ public class WmsInventoryPage extends WmsInventory {
     /**商品SKU编码*/
     private String skuCode;
 
+    /**商品编码（SPU 编码，存 sub_title）*/
+    private String spuCode;
+
     /**商品名称（SPU 标题）*/
     private String spuTitle;
 

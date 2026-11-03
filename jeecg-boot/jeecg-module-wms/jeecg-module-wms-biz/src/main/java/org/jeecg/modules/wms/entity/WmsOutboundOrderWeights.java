@@ -36,6 +36,18 @@ public class WmsOutboundOrderWeights implements Serializable {
     @Schema(description = "称重单号")
     private String weightsCode;
 
+    /** 关联箱号 */
+    @Schema(description = "关联箱号")
+    private String packageCode;
+
+    /** 包装类型 */
+    @Schema(description = "包装类型")
+    private String packageType;
+
+    /** 装箱件数 */
+    @Schema(description = "装箱件数")
+    private Integer packageCount;
+
     /** 出库单ID */
     @Schema(description = "出库单ID")
     private Long outboundOrderId;
@@ -57,6 +69,18 @@ public class WmsOutboundOrderWeights implements Serializable {
     /** 称重质量(克) */
     @Schema(description = "称重质量(克)")
     private Integer weightVal;
+
+    /** 实测重量(千克) */
+    @Schema(description = "实测重量(千克)")
+    private Double actualWeight;
+
+    /** 理论重量(千克) */
+    @Schema(description = "理论重量(千克)")
+    private Double theoreticalWeight;
+
+    /** 重量偏差(千克) */
+    @Schema(description = "重量偏差(千克)")
+    private Double diffWeight;
 
     /** 称重单位 */
     @Schema(description = "称重单位")
@@ -89,5 +113,5 @@ public class WmsOutboundOrderWeights implements Serializable {
     /** 是否删除 1未删除 2已删除 */
     @TableLogic(value = "1", delval = "2")
     @Schema(description = "是否删除 1未删除 2已删除")
-    private Integer isDel;
+    private Integer isDel = 1;
 }

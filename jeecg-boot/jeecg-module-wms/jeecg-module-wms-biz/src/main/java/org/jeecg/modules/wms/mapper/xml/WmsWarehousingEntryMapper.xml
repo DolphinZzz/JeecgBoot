@@ -55,8 +55,18 @@
         <if test="q.erpPoNo != null and q.erpPoNo != ''">
             AND e.erp_po_no LIKE CONCAT('%', #{q.erpPoNo}, '%')
         </if>
-        <if test="q.status != null">
-            AND e.status = #{q.status}
+        <if test="q.statusList != null and q.statusList.size() > 0">
+            <choose>
+                <when test="q.statusList.size() == 1">
+                    AND e.status = #{q.statusList[0]}
+                </when>
+                <otherwise>
+                    AND e.status IN
+                    <foreach collection="q.statusList" item="st" open="(" separator="," close=")">
+                        #{st}
+                    </foreach>
+                </otherwise>
+            </choose>
         </if>
         <if test="q.onlyOpen != null and q.onlyOpen">
             AND e.status NOT IN (60, 99)

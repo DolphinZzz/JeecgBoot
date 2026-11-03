@@ -7,6 +7,10 @@ import org.jeecg.modules.wms.enums.WmsInventoryBizTypeEnum;
 import org.jeecg.modules.wms.vo.WmsInventoryDimension;
 import org.jeecg.modules.wms.vo.WmsInventoryPage;
 import org.jeecg.modules.wms.vo.WmsInventoryQuery;
+import org.jeecg.modules.wms.vo.WmsInventoryLocaPageVO;
+import org.jeecg.modules.wms.vo.WmsInventoryLocaQuery;
+import org.jeecg.modules.wms.vo.WmsInventoryLedgerVO;
+import org.jeecg.modules.wms.vo.WmsInventoryLedgerQuery;
 
 /**
  * @Description: 多维实时库存
@@ -25,6 +29,16 @@ public interface IWmsInventoryService extends IService<WmsInventory> {
      * 多维库存查询。
      */
     IPage<WmsInventoryPage> queryInventoryPage(WmsInventoryQuery query, Integer pageNo, Integer pageSize);
+
+    /**
+     * 库存管理 - Tab 1: 库位列表分页查询
+     */
+    IPage<WmsInventoryLocaPageVO> queryLocaPage(WmsInventoryLocaQuery query, Integer pageNo, Integer pageSize);
+
+    /**
+     * 库存管理 - Tab 2: 全周期库存台账分页查询
+     */
+    IPage<WmsInventoryLedgerVO> queryLedgerPage(WmsInventoryLedgerQuery query, Integer pageNo, Integer pageSize);
 
     /**
      * 按维度取库存行，不存在返回 null。

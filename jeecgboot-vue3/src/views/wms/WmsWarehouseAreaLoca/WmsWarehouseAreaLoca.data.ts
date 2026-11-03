@@ -7,17 +7,42 @@ export const columns: BasicColumn[] = [
   {
     title: '所属仓库',
     align: 'center',
+    width: 130,
     dataIndex: 'warehouseId_dictText',
   },
   {
     title: '所属库区',
     align: 'center',
+    width: 140,
     dataIndex: 'warehouseAreaId_dictText',
   },
   {
     title: '库位编号',
     align: 'center',
+    width: 140,
     dataIndex: 'locaCode',
+    customRender: ({ text }) => h('span', { style: { fontWeight: 'bold', color: '#1890ff' } }, text),
+  },
+  {
+    title: '库位状态',
+    align: 'center',
+    width: 100,
+    dataIndex: 'locaStatus',
+    customRender: ({ record }) => {
+      const s = record.locaStatus;
+      if (s === 1) return h(Tag, { color: 'green' }, () => '空闲');
+      if (s === 2) return h(Tag, { color: 'orange' }, () => '占用');
+      if (s === 3) return h(Tag, { color: 'red' }, () => '盘点锁定');
+      if (s === 4) return h(Tag, { color: 'default' }, () => '禁用');
+      return record.locaStatus_dictText || '-';
+    },
+  },
+  {
+    title: '固定SKU',
+    align: 'center',
+    width: 130,
+    dataIndex: 'fixedSkuId_dictText',
+    customRender: ({ text }) => text || '非固定',
   },
   {
     title: '巷道/货架/层/位',
@@ -31,9 +56,16 @@ export const columns: BasicColumn[] = [
     },
   },
   {
+    title: '存储条件',
+    align: 'center',
+    width: 100,
+    dataIndex: 'storageCondition_dictText',
+    customRender: ({ text }) => text || '常温',
+  },
+  {
     title: '长×宽×高(mm)',
     align: 'center',
-    width: 160,
+    width: 150,
     dataIndex: 'locaLen',
     customRender: ({ record }) => {
       const { locaLen, locaWidth, locaHeight } = record;
@@ -44,75 +76,13 @@ export const columns: BasicColumn[] = [
   {
     title: 'ABC分类',
     align: 'center',
+    width: 90,
     dataIndex: 'abcClass',
     customRender: ({ text }) => {
       if (!text) return '-';
       const colorMap: Record<string, string> = { A: 'green', B: 'blue', C: 'orange' };
       return h(Tag, { color: colorMap[text] || 'default' }, () => text);
     },
-  },
-  {
-    title: '库位得分',
-    align: 'center',
-    dataIndex: 'locaScore',
-    customRender: ({ text }) => (text !== null && text !== undefined ? Number(text).toFixed(4) : '-'),
-  },
-  {
-    title: '人体工学',
-    align: 'center',
-    dataIndex: 'ergonomicLevel_dictText',
-    customRender: ({ text, record }) => {
-      if (text) return text;
-      if (record.ergonomicLevel === 1) return '黄金层';
-      if (record.ergonomicLevel === 2) return '次优层';
-      if (record.ergonomicLevel === 3) return '不便层';
-      return '-';
-    },
-  },
-  {
-    title: '拣货距离(m)',
-    align: 'center',
-    dataIndex: 'pickDistance',
-  },
-  {
-    title: '收货距离(m)',
-    align: 'center',
-    dataIndex: 'receiveDistance',
-  },
-  {
-    title: '存储条件',
-    align: 'center',
-    dataIndex: 'storageCondition_dictText',
-    customRender: ({ text }) => text || '常温',
-  },
-  {
-    title: '库位状态',
-    align: 'center',
-    dataIndex: 'locaStatus_dictText',
-    customRender: ({ text, record }) => {
-      if (text) return text;
-      if (record.locaStatus === 1) return '空闲';
-      if (record.locaStatus === 2) return '占用';
-      if (record.locaStatus === 3) return '盘点锁定';
-      if (record.locaStatus === 4) return '禁用';
-      return '-';
-    },
-  },
-  {
-    title: '混SKU/混批',
-    align: 'center',
-    dataIndex: 'allowMixSku',
-    customRender: ({ record }) => {
-      const sku = record.allowMixSku === 1 ? '是' : '否';
-      const batch = record.allowMixBatch === 1 ? '是' : '否';
-      return `${sku} / ${batch}`;
-    },
-  },
-  {
-    title: '固定SKU',
-    align: 'center',
-    dataIndex: 'fixedSkuId_dictText',
-    customRender: ({ text }) => text || '非固定',
   },
   {
     title: '容积(cm³)',
@@ -346,32 +316,6 @@ export const formSchema: FormSchema[] = [
       dictCode: 'wms_loca_status',
       stringToNumber: true,
       placeholder: '请选择状态',
-    },
-    colProps: { span: 12 },
-  },
-  {
-    label: '允许混SKU',
-    field: 'allowMixSku',
-    component: 'RadioGroup',
-    defaultValue: 0,
-    componentProps: {
-      options: [
-        { label: '否', value: 0 },
-        { label: '是', value: 1 },
-      ],
-    },
-    colProps: { span: 12 },
-  },
-  {
-    label: '允许混批次',
-    field: 'allowMixBatch',
-    component: 'RadioGroup',
-    defaultValue: 0,
-    componentProps: {
-      options: [
-        { label: '否', value: 0 },
-        { label: '是', value: 1 },
-      ],
     },
     colProps: { span: 12 },
   },

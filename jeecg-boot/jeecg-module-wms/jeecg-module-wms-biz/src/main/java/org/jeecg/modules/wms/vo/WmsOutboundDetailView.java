@@ -61,6 +61,22 @@ public class WmsOutboundDetailView implements Serializable {
     @Schema(description = "是否SN管理(1是 0否)")
     private Integer isSnManaged;
 
+    /** 商品单重 */
+    @Schema(description = "商品单重")
+    private Integer productWeight;
+
+    /** 重量单位 */
+    @Schema(description = "重量单位")
+    private String weightUnit;
+
+    /** 单件基准重量(克) */
+    @Schema(description = "单件基准重量(克)")
+    private Integer unitWeightG;
+
+    /** 单件重量(千克) */
+    @Schema(description = "单件重量(千克)")
+    private Double unitWeightKg;
+
     /** 临期禁出阈值天数 */
     @Schema(description = "临期禁出阈值天数")
     private Integer nearExpireDays;

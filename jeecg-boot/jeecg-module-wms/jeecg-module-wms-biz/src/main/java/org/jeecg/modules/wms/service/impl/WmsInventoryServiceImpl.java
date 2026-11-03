@@ -6,20 +6,21 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.jeecg.common.exception.JeecgBootException;
+import org.jeecg.common.util.oConvertUtils;
 import org.jeecg.modules.wms.entity.WmsInventory;
 import org.jeecg.modules.wms.entity.WmsInventoryLog;
 import org.jeecg.modules.wms.enums.WmsInventoryBizTypeEnum;
 import org.jeecg.modules.wms.mapper.WmsInventoryLogMapper;
 import org.jeecg.modules.wms.mapper.WmsInventoryMapper;
 import org.jeecg.modules.wms.service.IWmsInventoryService;
-import org.jeecg.modules.wms.vo.WmsInventoryDimension;
-import org.jeecg.modules.wms.vo.WmsInventoryPage;
-import org.jeecg.modules.wms.vo.WmsInventoryQuery;
+import org.jeecg.modules.wms.service.IWmsLocaItemCapacityService;
+import org.jeecg.modules.wms.vo.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Date;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * @Description: 多维实时库存
@@ -56,6 +57,61 @@ public class WmsInventoryServiceImpl extends ServiceImpl<WmsInventoryMapper, Wms
     public IPage<WmsInventoryPage> queryInventoryPage(WmsInventoryQuery query, Integer pageNo, Integer pageSize) {
         Page<WmsInventoryPage> page = new Page<>(pageNo == null ? 1 : pageNo, pageSize == null ? 10 : pageSize);
         return baseMapper.selectInventoryPage(page, query == null ? new WmsInventoryQuery() : query);
+    }
+
+    @Override
+    public IPage<WmsInventoryLocaPageVO> queryLocaPage(WmsInventoryLocaQuery query, Integer pageNo, Integer pageSize) {
+        Page<WmsInventoryLocaPageVO> page = new Page<>(pageNo == null ? 1 : pageNo, pageSize == null ? 10 : pageSize);
+        IPage<WmsInventoryLocaPageVO> resultPage = baseMapper.selectLocaPage(page, query == null ? new WmsInventoryLocaQuery() : query);
+        List<WmsInventoryLocaPageVO> records = resultPage.getRecords();
+        if (records == null || records.isEmpty()) {
+            return resultPage;
+        }
+
+        for (WmsInventoryLocaPageVO vo : records) {
+            int current = vo.getTotalCount() == null ? 0 : vo.getTotalCount();
+            vo.setCurrentCount(current);
+            vo.setTotalCount(current);
+            vo.setRemainCount(vo.getAvailableCount() == null ? 0 : vo.getAvailableCount());
+            vo.setSpuCapacityList(Collections.emptyList());
+            vo.setSpuCount(vo.getBoundSkuId() != null ? 1 : 0);
+
+            if (vo.getBoundSkuId() != null) {
+                String spu = oConvertUtils.isNotEmpty(vo.getSpuName()) ? vo.getSpuName() : "未命名商品";
+                String sku = oConvertUtils.isNotEmpty(vo.getSkuCode()) ? vo.getSkuCode() : String.valueOf(vo.getBoundSkuId());
+                vo.setSpuNamesText(spu + " [" + sku + "]");
+            } else {
+                vo.setSpuNamesText("未占用");
+            }
+
+            // 物理坐标拼接
+            List<String> posList = new ArrayList<>();
+            if (oConvertUtils.isNotEmpty(vo.getTunnelNumber())) posList.add(vo.getTunnelNumber() + "巷");
+            if (oConvertUtils.isNotEmpty(vo.getShelfNumber())) posList.add(vo.getShelfNumber() + "架");
+            if (oConvertUtils.isNotEmpty(vo.getLayerNumber())) posList.add(vo.getLayerNumber() + "层");
+            if (oConvertUtils.isNotEmpty(vo.getPositionNumber())) posList.add(vo.getPositionNumber() + "位");
+            vo.setPositionText(posList.isEmpty() ? "-" : String.join(" - ", posList));
+
+            // 状态推导：3 盘点锁定，4 禁用，否则按实际在库总件数判定（废除 5 满仓）
+            if (vo.getLocaStatus() != null && vo.getLocaStatus() == 3) {
+                vo.setLocaStatusText("盘点锁定");
+            } else if (vo.getLocaStatus() != null && vo.getLocaStatus() == 4) {
+                vo.setLocaStatusText("禁用");
+            } else if (current > 0) {
+                vo.setLocaStatus(2);
+                vo.setLocaStatusText("占用");
+            } else {
+                vo.setLocaStatus(1);
+                vo.setLocaStatusText("空闲");
+            }
+        }
+        return resultPage;
+    }
+
+    @Override
+    public IPage<WmsInventoryLedgerVO> queryLedgerPage(WmsInventoryLedgerQuery query, Integer pageNo, Integer pageSize) {
+        Page<WmsInventoryLedgerVO> page = new Page<>(pageNo == null ? 1 : pageNo, pageSize == null ? 10 : pageSize);
+        return baseMapper.selectLedgerPage(page, query == null ? new WmsInventoryLedgerQuery() : query);
     }
 
     @Override

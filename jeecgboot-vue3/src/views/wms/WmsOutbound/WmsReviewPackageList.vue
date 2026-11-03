@@ -1,5 +1,11 @@
 <template>
   <div>
+    <a-tabs v-model:activeKey="activeTabKey" @change="handleTabChange" style="background: #fff; padding: 12px 16px 0">
+      <a-tab-pane key="50" tab="待出库复核 (50)" />
+      <a-tab-pane key="60" tab="待打包称重 (60)" />
+      <a-tab-pane key="ALL" tab="全部单据" />
+    </a-tabs>
+
     <BasicTable @register="registerTable">
       <template #action="{ record }">
         <TableAction :actions="getTableAction(record)" />
@@ -14,7 +20,7 @@
 </template>
 
 <script lang="ts" name="wms-wmsReviewPackage" setup>
-  import { reactive } from 'vue';
+  import { ref } from 'vue';
   import { BasicTable, TableAction, ActionItem } from '/@/components/Table';
   import { useModal } from '/@/components/Modal';
   import { useDrawer } from '/@/components/Drawer';
@@ -25,9 +31,7 @@
   import { columns, searchFormSchema } from './WmsOutbound.data';
   import { list } from './WmsOutbound.api';
 
-  const queryParam = reactive<any>({
-    status: 50,
-  });
+  const activeTabKey = ref('50');
 
   const [registerReviewModal, { openModal: openReviewModal }] = useModal();
   const [registerPackageModal, { openModal: openPackageModal }] = useModal();
@@ -52,12 +56,22 @@
         slots: { customRender: 'action' },
       },
       beforeFetch: (params) => {
-        return Object.assign(params, queryParam);
+        const p = Object.assign({}, params);
+        if (activeTabKey.value !== 'ALL') {
+          p.status = Number(activeTabKey.value);
+        } else {
+          delete p.status;
+        }
+        return p;
       },
     },
   });
 
   const [registerTable, { reload }] = tableContext;
+
+  function handleTabChange() {
+    reload();
+  }
 
   function handleReview(record: Recordable) {
     openReviewModal(true, { record });

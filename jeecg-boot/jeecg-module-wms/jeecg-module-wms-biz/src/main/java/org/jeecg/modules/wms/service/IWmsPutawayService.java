@@ -9,7 +9,7 @@ import org.jeecg.modules.wms.vo.WmsPutawayRequest;
  *
  * 第 1 层硬过滤（所有策略共用，任何策略都绕不过）：
  *   库位状态未禁用 / 未盘点锁定 → 质量状态对应的库区类型 → 存储条件 →
- *   分区 zone_type（含兜底）→ 混放规则 → 剩余容积与承重。
+ *   混放规则 → 剩余容积与承重。
  * 第 2 层排序：按 SKU 的 putaway_strategy（为空取仓库默认 ABC）执行
  *   FIXED / ABC / NEAREST 三种排序。
  * 第 3 层拆分：按 cap_i = min(⌊剩余体积/单件体积⌋, ⌊剩余承重/单件重量⌋)

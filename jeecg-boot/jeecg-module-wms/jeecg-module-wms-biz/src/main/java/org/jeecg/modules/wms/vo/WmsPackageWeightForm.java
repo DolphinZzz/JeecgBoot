@@ -24,9 +24,12 @@ public class WmsPackageWeightForm implements Serializable {
     private Long outboundOrderId;
 
     /** 实测总重量（克） */
-    @NotNull(message = "实测总重量不能为空")
-    @Schema(description = "实测总重量(克)", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "实测总重量(克)")
     private Integer actualWeight;
+
+    /** 实测总重量（千克，前端输入） */
+    @Schema(description = "实测总重量(千克)")
+    private Double actualWeightKg;
 
     /** 物流公司/承运商ID */
     @Schema(description = "承运商ID")
@@ -40,6 +43,10 @@ public class WmsPackageWeightForm implements Serializable {
     @Schema(description = "打包箱单清单")
     private List<WmsPackageBoxItem> packages;
 
+    /** 箱单称重明细清单 */
+    @Schema(description = "箱单称重明细清单")
+    private List<WmsWeightBoxItem> weights;
+
     @Data
     @Schema(description = "打包箱单行")
     public static class WmsPackageBoxItem implements Serializable {
@@ -48,6 +55,20 @@ public class WmsPackageWeightForm implements Serializable {
         private Long detailId;
         private Long skuId;
         private String packageCode;
+        private String packageType;
         private Integer packageCount;
+    }
+
+    @Data
+    @Schema(description = "箱单称重明细行")
+    public static class WmsWeightBoxItem implements Serializable {
+        private static final long serialVersionUID = 1L;
+
+        private String packageCode;
+        private String packageType;
+        private Integer packageCount;
+        private Double actualWeight; // kg
+        private Double theoreticalWeight; // kg
+        private Double diffWeight; // kg
     }
 }

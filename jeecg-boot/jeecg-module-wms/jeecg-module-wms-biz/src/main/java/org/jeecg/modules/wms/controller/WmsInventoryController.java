@@ -9,8 +9,7 @@ import org.jeecg.common.aspect.annotation.AutoLog;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.jeecg.modules.wms.entity.WmsInventory;
 import org.jeecg.modules.wms.service.IWmsInventoryService;
-import org.jeecg.modules.wms.vo.WmsInventoryPage;
-import org.jeecg.modules.wms.vo.WmsInventoryQuery;
+import org.jeecg.modules.wms.vo.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,6 +41,28 @@ public class WmsInventoryController {
                                                          @RequestParam(name = "pageNo", defaultValue = "1") Integer pageNo,
                                                          @RequestParam(name = "pageSize", defaultValue = "10") Integer pageSize) {
         return Result.OK(wmsInventoryService.queryInventoryPage(query, pageNo, pageSize));
+    }
+
+    /**
+     * 库存管理 - Tab 1: 库位列表（含商品规划与容量占用）
+     */
+    @Operation(summary = "库存管理-库位列表分页查询")
+    @GetMapping(value = "/locaPageList")
+    public Result<IPage<WmsInventoryLocaPageVO>> queryLocaPageList(WmsInventoryLocaQuery query,
+                                                                   @RequestParam(name = "pageNo", defaultValue = "1") Integer pageNo,
+                                                                   @RequestParam(name = "pageSize", defaultValue = "10") Integer pageSize) {
+        return Result.OK(wmsInventoryService.queryLocaPage(query, pageNo, pageSize));
+    }
+
+    /**
+     * 库存管理 - Tab 2: 全周期库存台账
+     */
+    @Operation(summary = "库存管理-全周期库存台账分页查询")
+    @GetMapping(value = "/ledgerPageList")
+    public Result<IPage<WmsInventoryLedgerVO>> queryLedgerPageList(WmsInventoryLedgerQuery query,
+                                                                     @RequestParam(name = "pageNo", defaultValue = "1") Integer pageNo,
+                                                                     @RequestParam(name = "pageSize", defaultValue = "10") Integer pageSize) {
+        return Result.OK(wmsInventoryService.queryLedgerPage(query, pageNo, pageSize));
     }
 
     /**

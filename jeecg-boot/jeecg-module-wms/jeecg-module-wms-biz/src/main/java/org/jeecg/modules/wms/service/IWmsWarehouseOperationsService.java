@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import org.jeecg.modules.wms.entity.WmsWarehouseOperations;
 import org.jeecg.modules.wms.entity.WmsWarehouseOperationsDetails;
+import org.jeecg.modules.wms.vo.WmsAreaMigrationForm;
+import org.jeecg.modules.wms.vo.WmsAreaMigrationPreviewVO;
 import org.jeecg.modules.wms.vo.WmsOperationForm;
 
 /**
@@ -48,4 +50,24 @@ public interface IWmsWarehouseOperationsService extends IService<WmsWarehouseOpe
      * @param skuIds      指定 SKU；为空表示扫描该仓库全部启用补货维度的 SKU
      */
     WmsWarehouseOperations generateReplenish(Integer warehouseId, List<Long> skuIds);
+
+    /**
+     * 整库区迁移预检：扫描源库区在库商品并自动匹配目标库区空闲库位
+     *
+     * @param sourceWarehouseId     源仓库ID
+     * @param sourceWarehouseAreaId 源库区ID
+     * @param targetWarehouseId     目标仓库ID
+     * @param targetWarehouseAreaId 目标库区ID
+     * @return 预检与匹配明细
+     */
+    WmsAreaMigrationPreviewVO previewAreaMigration(Integer sourceWarehouseId, Integer sourceWarehouseAreaId,
+                                                   Integer targetWarehouseId, Integer targetWarehouseAreaId);
+
+    /**
+     * 执行整库区迁移：生成移库单并支持立即完成货物搬移
+     *
+     * @param form 整库区迁移提交表单
+     * @return 执行结果
+     */
+    Map<String, Object> executeAreaMigration(WmsAreaMigrationForm form);
 }

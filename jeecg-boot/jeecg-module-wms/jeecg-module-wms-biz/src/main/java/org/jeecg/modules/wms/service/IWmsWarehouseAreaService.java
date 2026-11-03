@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.io.Serializable;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * @Description: 库区管理
@@ -25,4 +26,9 @@ public interface IWmsWarehouseAreaService extends IService<WmsWarehouseArea> {
      */
     @Override
     boolean removeByIds(Collection<?> list);
+
+    /**
+     * 批量填充库区的库位容量统计（总库位、空闲数、占用数、在库件数）
+     */
+    void fillAreaStatistics(List<WmsWarehouseArea> records);
 }

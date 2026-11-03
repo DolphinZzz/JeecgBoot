@@ -24,9 +24,6 @@ public class WmsPutawayCandidate {
     /**候选库位*/
     private WmsWarehouseAreaLoca loca;
 
-    /**库区分区类型(zone_type)*/
-    private String zoneType;
-
     /**库区类型(category)：STORAGE / PICKING / RETURN 等*/
     private String areaCategory;
 

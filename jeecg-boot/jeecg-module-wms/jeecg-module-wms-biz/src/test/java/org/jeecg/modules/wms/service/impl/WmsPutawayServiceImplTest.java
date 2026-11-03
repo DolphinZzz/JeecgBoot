@@ -7,12 +7,14 @@ import org.jeecg.modules.wms.entity.WmsItemSpu;
 import org.jeecg.modules.wms.entity.WmsWarehouseArea;
 import org.jeecg.modules.wms.entity.WmsWarehouseAreaLoca;
 import org.jeecg.modules.wms.entity.WmsWarehouse;
+import org.jeecg.modules.wms.entity.WmsLocaItemCapacity;
 import org.jeecg.modules.wms.mapper.WmsInventoryMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSkuMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSpuMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaLocaMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseMapper;
+import org.jeecg.modules.wms.service.IWmsLocaItemCapacityService;
 import org.jeecg.modules.wms.service.IWmsStrategyConfigService;
 import org.jeecg.modules.wms.vo.WmsPutawayLocaOption;
 import org.jeecg.modules.wms.vo.WmsPutawayPlan;
@@ -70,6 +72,9 @@ public class WmsPutawayServiceImplTest {
     @Mock
     private IWmsStrategyConfigService strategyConfigService;
 
+    @Mock
+    private IWmsLocaItemCapacityService capacityService;
+
     @InjectMocks
     private WmsPutawayServiceImpl putawayService;
 
@@ -96,25 +101,38 @@ public class WmsPutawayServiceImplTest {
                 .thenReturn(true);
         lenient().when(strategyConfigService.getBooleanConfig(anyInt(), eq("fixed_loca_lend_when_empty"), anyBoolean()))
                 .thenReturn(false);
-        lenient().when(strategyConfigService.getDoubleConfig(anyInt(), eq("zone_valuable_price"), anyDouble()))
-                .thenReturn(5000D);
-        lenient().when(strategyConfigService.getIntConfig(anyInt(), eq("zone_large_volume"), anyInt()))
-                .thenReturn(125000);
-        lenient().when(strategyConfigService.getIntConfig(anyInt(), eq("zone_large_weight"), anyInt()))
-                .thenReturn(25000);
-        lenient().when(strategyConfigService.getIntConfig(anyInt(), eq("zone_large_side"), anyInt()))
-                .thenReturn(1200);
-        lenient().when(strategyConfigService.getIntConfig(anyInt(), eq("zone_small_volume"), anyInt()))
-                .thenReturn(1000);
+
+        // 默认库位预置 SPU 规划容量 (1~20号库位均规划 SPU 1，上限 1000 件)
+        lenient().when(capacityService.listByWarehouseAndSpu(anyInt(), anyLong()))
+                .thenAnswer(inv -> {
+                    List<WmsLocaItemCapacity> list = new ArrayList<>();
+                    for (int i = 1; i <= 20; i++) {
+                        list.add(new WmsLocaItemCapacity()
+                                .setWarehouseId(inv.getArgument(0))
+                                .setWarehouseAreaLocaId(i)
+                                .setSpuId(inv.getArgument(1))
+                                .setMaxCount(1000));
+                    }
+                    return list;
+                });
+        lenient().when(capacityService.getByLocaAndSpu(anyInt(), anyLong()))
+                .thenAnswer(inv -> new WmsLocaItemCapacity()
+                        .setWarehouseAreaLocaId(inv.getArgument(0))
+                        .setSpuId(inv.getArgument(1))
+                        .setMaxCount(1000));
     }
 
     private WmsItemSpu spu(String storageCondition, int isValuable) {
         return new WmsItemSpu().setId(1L).setStorageCondition(storageCondition).setIsValuable(isValuable);
     }
 
-    private WmsWarehouseArea area(Integer id, String category, String zoneType, String storageCondition) {
+    private WmsWarehouseArea area(Integer id, String category, String storageCondition) {
         return new WmsWarehouseArea().setId(id).setWarehouseId(WAREHOUSE_ID)
-                .setCategory(category).setZoneType(zoneType).setStorageCondition(storageCondition);
+                .setCategory(category).setStorageCondition(storageCondition);
+    }
+
+    private WmsWarehouseArea area(Integer id, String category, String zoneType, String storageCondition) {
+        return area(id, category, storageCondition);
     }
 
     private WmsWarehouseAreaLoca loca(Integer id, String code, Integer areaId, int volume, int bearing) {
@@ -133,7 +151,7 @@ public class WmsPutawayServiceImplTest {
 
     /** 公共桩：一个 STORAGE/GENERAL 库区 + 一个 SMALL 库区 */
     private void stubAreas(WmsWarehouseArea... areas) {
-        when(areaMapper.selectList(any())).thenReturn(Arrays.asList(areas));
+        lenient().when(areaMapper.selectList(any())).thenReturn(Arrays.asList(areas));
         lenient().when(areaMapper.selectById(anyInt())).thenAnswer(inv -> {
             Integer id = inv.getArgument(0);
             return Arrays.stream(areas).filter(a -> a.getId().equals(id)).findFirst().orElse(null);
@@ -238,12 +256,11 @@ public class WmsPutawayServiceImplTest {
 
         WmsPutawayPlan plan = putawayService.recommend(request(1));
         assertEquals(1, plan.getLines().size());
-        assertEquals("SMALL", plan.getZoneType(), "1000 cm³ 应推导为小件");
     }
 
     @Test
-    void valuableZoneHasNoFallback() {
-        // 贵品不允许兜底：只有 GENERAL 库区时必须报无可放库位
+    void valuableGoodsCanBePlacedInGeneralStorageArea() {
+        // 解除商品分区硬卡后：贵品商品在普通存储区库位上也可正常推荐落库
         stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL"));
         when(locaMapper.selectList(any())).thenReturn(
                 Collections.singletonList(loca(1, "L-01", 1, 100000, 100000)));
@@ -252,14 +269,13 @@ public class WmsPutawayServiceImplTest {
         when(spuMapper.selectById(1L)).thenReturn(spu("NORMAL", 1));
 
         WmsPutawayPlan plan = putawayService.recommend(request(3));
-        assertEquals("VALUABLE", plan.getZoneType());
-        assertTrue(plan.getLines().isEmpty(), "贵品不允许兜底到通用区");
-        assertEquals(3, plan.getRemainCount());
+        assertEquals(1, plan.getLines().size(), "解除分区硬卡后贵品可正常上架到通用存储区");
+        assertEquals(3, plan.getLines().get(0).getCount());
+        assertEquals(0, plan.getRemainCount());
     }
 
     @Test
     void smallZoneFallsBackToGeneral() {
-        // 小件可以兜底到通用区
         stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL"));
         when(locaMapper.selectList(any())).thenReturn(
                 Collections.singletonList(loca(1, "L-01", 1, 100000, 100000)));
@@ -268,7 +284,6 @@ public class WmsPutawayServiceImplTest {
         when(spuMapper.selectById(1L)).thenReturn(spu("NORMAL", 0));
 
         WmsPutawayPlan plan = putawayService.recommend(request(3));
-        assertEquals("SMALL", plan.getZoneType());
         assertEquals(1, plan.getLines().size(), "小件兜底到通用区应成功");
         assertEquals(3, plan.getLines().get(0).getCount());
     }
@@ -466,19 +481,19 @@ public class WmsPutawayServiceImplTest {
     }
 
     @Test
-    void emptyReasonPointsAtZoneMismatch() {
-        // 贵品商品放在只有 GENERAL 区的仓库：分区不匹配，且贵品不允许兜底
+    void emptyReasonPointsAtConditionMismatch() {
+        // 冷藏商品放在只有常温库区的仓库：存储条件不匹配，推荐计划应给出原因
         stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL"));
         when(locaMapper.selectList(any())).thenReturn(Collections.singletonList(loca(1, "L-01", 1, 100000, 100000)));
         when(inventoryMapper.selectList(any())).thenReturn(new ArrayList<>());
         when(skuMapper.selectById(SKU_ID)).thenReturn(sku);
-        when(spuMapper.selectById(1L)).thenReturn(spu("NORMAL", 1));
+        when(spuMapper.selectById(1L)).thenReturn(spu("COLD", 0));
 
         WmsPutawayPlan plan = putawayService.recommend(request(1));
         assertTrue(plan.getLines().isEmpty());
         assertEquals(1, plan.getRejectedCount());
-        assertTrue(plan.getEmptyReason().contains("分区"), plan.getEmptyReason());
-        assertTrue(plan.getEmptyReason().contains("贵品"), plan.getEmptyReason());
+        assertNotNull(plan.getEmptyReason());
+        assertTrue(plan.getEmptyReason().contains("存储条件"), plan.getEmptyReason());
     }
 
     @Test
@@ -510,7 +525,6 @@ public class WmsPutawayServiceImplTest {
         assertEquals("上海一号仓", first.getWarehouseName());
         assertEquals("常温存储区A", first.getAreaName());
         assertEquals("存储", first.getAreaCategoryText());
-        assertEquals("通用", first.getZoneTypeText());
         assertEquals("空闲", first.getLocaStatusText());
         assertEquals(Integer.valueOf(1200), first.getLocaLen());
         assertEquals(Integer.valueOf(1000), first.getLocaWidth());
@@ -594,5 +608,52 @@ public class WmsPutawayServiceImplTest {
         assertEquals(3, plan.getLines().get(0).getCount(),
                 "mm 当 cm 算会把单件体积放大 1000 倍，一件都放不下");
         assertEquals(2, plan.getRemainCount());
+    }
+
+    @Test
+    void assertLocaAllowedRejectsWhenOccupiedByOtherSku() {
+        // 存储区一库位一SKU，库位已有其他 SKU 时拒绝上架
+        stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL"));
+        when(locaMapper.selectById(1)).thenReturn(loca(1, "01-A-01-01", 1, 100000, 100000));
+        when(skuMapper.selectById(SKU_ID)).thenReturn(sku);
+        when(spuMapper.selectById(1L)).thenReturn(spu("NORMAL", 0));
+        when(inventoryMapper.selectList(any())).thenReturn(Collections.singletonList(
+                new WmsInventory().setWarehouseAreaLocaId(1).setSkuId(999L).setTotalCount(10).setBatchNumber("B001")));
+
+        JeecgBootException ex = assertThrows(JeecgBootException.class,
+                () -> putawayService.checkTargetLoca(request(1), 1));
+        assertTrue(ex.getMessage().contains("不允许混放SKU"), ex.getMessage());
+    }
+
+    @Test
+    void checkForcedLocaRejectsWhenDisabled() {
+        // 强制上架仍然拦截禁用库位 (locaStatus = 4)
+        when(locaMapper.selectById(5)).thenReturn(loca(5, "01-A-03-01", 1, 100000, 100000).setLocaStatus(4));
+
+        JeecgBootException ex = assertThrows(JeecgBootException.class,
+                () -> putawayService.checkForcedLoca(request(1), 5));
+        assertTrue(ex.getMessage().contains("已禁用"), ex.getMessage());
+    }
+
+    @Test
+    void listLocaOptionsFiltersAndPopulatesLocaStatus() {
+        stubAreas(area(1, "STORAGE", "GENERAL", "NORMAL").setName("常温存储区A"));
+        WmsWarehouseAreaLoca boundLoca = loca(1, "01-A-01-01", 1, 100000, 100000);
+        when(locaMapper.selectList(any())).thenReturn(Collections.singletonList(boundLoca));
+        when(inventoryMapper.selectList(any())).thenReturn(new ArrayList<>());
+        when(skuMapper.selectById(SKU_ID)).thenReturn(sku);
+        when(spuMapper.selectById(1L)).thenReturn(spu("NORMAL", 0).setTitle("数字万用表").setSubTitle("ELEC-DMM-001"));
+        when(warehouseMapper.selectById(WAREHOUSE_ID)).thenReturn(new WmsWarehouse().setId(WAREHOUSE_ID).setName("上海一号仓"));
+
+        List<WmsPutawayLocaOption> options = putawayService.listLocaOptions(request(1));
+
+        assertEquals(1, options.size());
+        WmsPutawayLocaOption opt = options.get(0);
+        assertEquals("01-A-01-01", opt.getLocaCode());
+        assertEquals("数字万用表", opt.getSpuName());
+        assertEquals(Integer.valueOf(0), opt.getUsedCount());
+        assertEquals("EMPTY", opt.getCapacityStatus());
+        assertEquals("空闲", opt.getCapacityStatusText());
+        assertTrue(opt.isAllowed());
     }
 }

@@ -14,6 +14,7 @@ import org.jeecg.modules.wms.mapper.*;
 import org.jeecg.modules.wms.service.IWmsInventoryService;
 import org.jeecg.modules.wms.service.IWmsOutboundOrderService;
 import org.jeecg.modules.wms.service.IWmsWarehouseService;
+import org.jeecg.modules.wms.util.WmsUnitConverter;
 import org.jeecg.modules.wms.vo.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -100,81 +101,204 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
 
     @Override
     public List<WmsOutboundDetailView> listDetails(Long orderId) {
-        return outboundOrderDetailsMapper.selectDetailViewsByOrderId(orderId);
+        List<WmsOutboundDetailView> list = outboundOrderDetailsMapper.selectDetailViewsByOrderId(orderId);
+        if (list != null) {
+            for (WmsOutboundDetailView v : list) {
+                int weightG = 0;
+                if (v.getProductWeight() != null && v.getProductWeight() > 0) {
+                    String unit = v.getWeightUnit() != null ? v.getWeightUnit().trim().toLowerCase() : "g";
+                    switch (unit) {
+                        case "mg":
+                            weightG = Math.max(1, v.getProductWeight() / 1000);
+                            break;
+                        case "kg":
+                            weightG = v.getProductWeight() * 1000;
+                            break;
+                        default:
+                            weightG = v.getProductWeight();
+                            break;
+                    }
+                }
+                v.setUnitWeightG(weightG);
+                v.setUnitWeightKg(weightG > 0 ? Math.round((weightG / 1000.0) * 1000.0) / 1000.0 : 0.0);
+            }
+        }
+        return list;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public WmsOutboundOrder createOutboundOrder(WmsOutboundCreateForm form) {
-        // 1. 校验仓库类型与规则（决策 D1）
+        // 1. 校验出库类型（支持：1销售出库 2MES工单领料 3采购退货，调拨出库不在此处理）
+        if (!Objects.equals(form.getOutboundType(), WmsOutboundTypeEnum.SALE.getCode())
+                && !Objects.equals(form.getOutboundType(), WmsOutboundTypeEnum.MES_WORK_ORDER.getCode())
+                && !Objects.equals(form.getOutboundType(), WmsOutboundTypeEnum.PURCHASE_RETURN.getCode())) {
+            throw new JeecgBootException("不支持的出库类型: " + form.getOutboundType() + "，仅支持销售出库(1)、MES工单领料(2)、采购退货(3)");
+        }
+
+        // 校验仓库是否存在
         WmsWarehouse warehouse = warehouseService.getById(form.getWarehouseId());
         if (warehouse == null) {
             throw new JeecgBootException("指定仓库不存在: id=" + form.getWarehouseId());
         }
 
-        WmsWarehouseTypeEnum whType = WmsWarehouseTypeEnum.of(warehouse.getWarehouseType());
+        // MES工单领料出库：强校验必填MES工单号
         if (Objects.equals(form.getOutboundType(), WmsOutboundTypeEnum.MES_WORK_ORDER.getCode())) {
-            if (whType.requireMesWorkOrder() && (form.getMesWorkOrderNo() == null || form.getMesWorkOrderNo().trim().isEmpty())) {
-                throw new JeecgBootException("工业制造仓的 MES 工单领料出库必须绑定生产工单号(mes_work_order_no)");
+            if (form.getMesWorkOrderNo() == null || form.getMesWorkOrderNo().trim().isEmpty()) {
+                throw new JeecgBootException("MES工单领料出库必须录入MES生产工单号(mesWorkOrderNo)");
             }
         }
+        // 销售出库：强校验必选客户
         if (Objects.equals(form.getOutboundType(), WmsOutboundTypeEnum.SALE.getCode())) {
             if (form.getCustomerId() == null) {
-                throw new JeecgBootException("销售出库必须选择客户(customer_id)");
+                throw new JeecgBootException("销售出库必须选择客户(customerId)");
             }
+        }
+
+        if (form.getDetails() == null || form.getDetails().isEmpty()) {
+            throw new JeecgBootException("出库明细不能为空");
         }
 
         // 2. 生成出库单号
         String datePrefix = new SimpleDateFormat("yyyyMMdd").format(new Date());
         String outboundCode = generateOutboundCode(datePrefix);
 
-        // 3. 计算计划总件数
+        // 3. 计算计划总件数并校验明细库存
         int totalCount = 0;
         for (WmsOutboundDetailForm line : form.getDetails()) {
+            if (line.getOutCount() == null || line.getOutCount() <= 0) {
+                throw new JeecgBootException("计划出库数必须大于 0");
+            }
             totalCount += line.getOutCount();
         }
 
-        // 4. 保存单头
+        // 4. 逐行校验库位库存硬约束与同单聚合超卖拦截
+        Long inferredConsignorId = form.getConsignorId();
+        List<WmsInventory> matchedInventories = new ArrayList<>();
+        boolean isErpOrder = form.getErpOrderNo() != null && !form.getErpOrderNo().trim().isEmpty();
+
+        // 汇总同 (locaId + skuId + batchNumber) 累计出库量，防同单内多行超卖
+        Map<String, Integer> dimDemandMap = new HashMap<>();
+        for (WmsOutboundDetailForm line : form.getDetails()) {
+            if (line.getWarehouseAreaLocaId() != null && line.getWarehouseAreaLocaId() > 0) {
+                String key = line.getWarehouseAreaLocaId() + "_" + line.getSkuId() + "_" + (line.getBatchNumber() != null ? line.getBatchNumber().trim() : "");
+                dimDemandMap.merge(key, line.getOutCount(), Integer::sum);
+            }
+        }
+
+        for (WmsOutboundDetailForm line : form.getDetails()) {
+            Integer locaId = line.getWarehouseAreaLocaId();
+            if (locaId == null || locaId <= 0) {
+                if (!isErpOrder) {
+                    throw new JeecgBootException("出库明细未指定出库库位: skuId=" + line.getSkuId());
+                }
+                matchedInventories.add(null);
+                continue;
+            }
+
+            // 查询指定库位中该商品良品可用库存
+            LambdaQueryWrapper<WmsInventory> invQw = new LambdaQueryWrapper<WmsInventory>()
+                    .eq(WmsInventory::getWarehouseId, form.getWarehouseId())
+                    .eq(WmsInventory::getWarehouseAreaLocaId, locaId)
+                    .eq(WmsInventory::getSkuId, line.getSkuId())
+                    .eq(WmsInventory::getQualityStatus, 1) // 1良品
+                    .eq(WmsInventory::getIsDel, 1);
+
+            if (line.getBatchNumber() != null && !line.getBatchNumber().trim().isEmpty()) {
+                invQw.eq(WmsInventory::getBatchNumber, line.getBatchNumber().trim());
+            }
+
+            List<WmsInventory> invList = inventoryMapper.selectList(invQw);
+            if (invList.isEmpty()) {
+                WmsWarehouseAreaLoca loca = locaMapper.selectById(locaId);
+                String locaCode = loca != null ? loca.getLocaCode() : String.valueOf(locaId);
+                throw new JeecgBootException("商品[ID=" + line.getSkuId() + "]在库位[" + locaCode + "]不存在可用良品库存");
+            }
+
+            int availableSum = invList.stream().mapToInt(i -> i.getAvailableCount() != null ? i.getAvailableCount() : 0).sum();
+            String key = locaId + "_" + line.getSkuId() + "_" + (line.getBatchNumber() != null ? line.getBatchNumber().trim() : "");
+            int totalDemand = dimDemandMap.getOrDefault(key, line.getOutCount());
+            if (availableSum < totalDemand) {
+                WmsWarehouseAreaLoca loca = locaMapper.selectById(locaId);
+                String locaCode = loca != null ? loca.getLocaCode() : String.valueOf(locaId);
+                throw new JeecgBootException("库位[" + locaCode + "]可用库存不足 (当前可用: " + availableSum + "，计划出库合计: " + totalDemand + ")，不允许出库！");
+            }
+
+            WmsInventory matchedInv = invList.get(0);
+            matchedInventories.add(matchedInv);
+
+            if (inferredConsignorId == null && matchedInv.getConsignorId() != null) {
+                inferredConsignorId = matchedInv.getConsignorId();
+            }
+        }
+
+        // 5. 保存单头（手工指定库位建单直接推进至 20 已分配/已锁库；ERP无库位单据置为 10 待分配）
+        Date now = new Date();
+        String operator = currentUsername();
+        boolean autoAllocated = !isErpOrder;
+
         WmsOutboundOrder order = new WmsOutboundOrder();
         order.setOutboundCode(outboundCode)
                 .setOutboundType(form.getOutboundType())
                 .setPickMode(form.getPickMode() != null ? form.getPickMode() : WmsPickModeEnum.PIECE_PICK.getCode())
                 .setWarehouseId(form.getWarehouseId())
-                .setConsignorId(form.getConsignorId())
+                .setConsignorId(inferredConsignorId != null ? inferredConsignorId : 1L)
                 .setCustomerId(form.getCustomerId())
                 .setErpOrderNo(form.getErpOrderNo())
-                .setMesWorkOrderNo(form.getMesWorkOrderNo())
+                .setMesWorkOrderNo(form.getMesWorkOrderNo() != null ? form.getMesWorkOrderNo().trim() : null)
                 .setLogisticsCompanyId(form.getLogisticsCompanyId())
-                .setStatus(WmsOutboundStatusEnum.PENDING_ALLOCATE.getCode())
+                .setStatus(autoAllocated ? WmsOutboundStatusEnum.ALLOCATED.getCode() : WmsOutboundStatusEnum.PENDING_ALLOCATE.getCode())
                 .setTotalCount(totalCount)
                 .setTotalWeight(0)
                 .setTotalVolume(0)
                 .setPrice(0)
-                .setCreateTime(new Date());
+                .setIsDel(1)
+                .setCreateBy(operator)
+                .setCreateTime(now);
 
         save(order);
 
-        // 5. 保存明细行
-        Date now = new Date();
-        for (WmsOutboundDetailForm line : form.getDetails()) {
+        // 6. 保存明细行并绑定库位及库存属性，若已指定库位则原子锁库
+        for (int i = 0; i < form.getDetails().size(); i++) {
+            WmsOutboundDetailForm line = form.getDetails().get(i);
+            WmsInventory matchedInv = matchedInventories.get(i);
+
             WmsOutboundOrderDetails detail = new WmsOutboundOrderDetails();
             detail.setOutboundOrderId(order.getId())
                     .setSkuId(line.getSkuId())
-                    .setConsignorId(form.getConsignorId())
-                    .setBatchNumber(line.getBatchNumber())
+                    .setConsignorId(matchedInv != null && matchedInv.getConsignorId() != null ? matchedInv.getConsignorId() : order.getConsignorId())
+                    .setBatchNumber(matchedInv != null && matchedInv.getBatchNumber() != null ? matchedInv.getBatchNumber() : line.getBatchNumber())
+                    .setExpireDate(matchedInv != null ? matchedInv.getExpireDate() : null)
                     .setOutCount(line.getOutCount())
-                    .setAllocatedCount(0)
+                    .setAllocatedCount(autoAllocated ? line.getOutCount() : 0)
                     .setPickedCount(0)
                     .setReviewCount(0)
                     .setReviewStatus(WmsReviewStatusEnum.UNREVIEWED.getCode())
                     .setShortageHandle(line.getShortageHandle() != null ? line.getShortageHandle() : WmsShortageHandleEnum.REMOVE_SHORTAGE.getCode())
                     .setPickStatus(1) // 未拣货
                     .setTargetWarehouseId(form.getWarehouseId())
-                    .setTargetWarehouseAreaId(0)
-                    .setTargetWarehouseAreaLocaId(0)
+                    .setTargetWarehouseAreaId(matchedInv != null && matchedInv.getWarehouseAreaId() != null ? matchedInv.getWarehouseAreaId() : 0)
+                    .setTargetWarehouseAreaLocaId(line.getWarehouseAreaLocaId() != null ? line.getWarehouseAreaLocaId() : 0)
+                    .setIsDel(1)
+                    .setCreateBy(operator)
                     .setCreateTime(now);
 
             outboundOrderDetailsMapper.insert(detail);
+
+            // 手工指定库位建单：单事务内立即预占锁定该库位库存
+            if (autoAllocated && matchedInv != null) {
+                WmsInventoryDimension dimension = new WmsInventoryDimension()
+                        .setWarehouseId(form.getWarehouseId())
+                        .setWarehouseAreaId(matchedInv.getWarehouseAreaId() != null ? matchedInv.getWarehouseAreaId() : 0)
+                        .setWarehouseAreaLocaId(line.getWarehouseAreaLocaId())
+                        .setConsignorId(detail.getConsignorId())
+                        .setSkuId(line.getSkuId())
+                        .setBatchNumber(detail.getBatchNumber() != null ? detail.getBatchNumber() : "")
+                        .setQualityStatus(1);
+
+                inventoryService.applyChange(dimension, 0, line.getOutCount(), 0,
+                        WmsInventoryBizTypeEnum.LOCK, order.getOutboundCode(), "新建出库单指定库位预占锁库");
+            }
         }
 
         return order;
@@ -311,6 +435,11 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
 
             if (order.getConsignorId() != null) {
                 invQw.eq(WmsInventory::getConsignorId, order.getConsignorId());
+            }
+
+            // 若明细指定了目标库位，严格限定在该库位分配
+            if (detail.getTargetWarehouseAreaLocaId() != null && detail.getTargetWarehouseAreaLocaId() > 0) {
+                invQw.eq(WmsInventory::getWarehouseAreaLocaId, detail.getTargetWarehouseAreaLocaId());
             }
 
             // MES工单领料场景若指定了批次号，强匹配批次
@@ -531,27 +660,46 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
             throw new JeecgBootException("出库单当前不是待复核状态(50)，无法复核");
         }
 
-        Map<Long, WmsReviewConfirmForm.WmsReviewLineItem> reviewMap = form.getReviewLines().stream()
-                .collect(Collectors.toMap(WmsReviewConfirmForm.WmsReviewLineItem::getDetailId, r -> r));
-
         List<WmsOutboundOrderDetails> details = outboundOrderDetailsMapper.selectList(
                 new LambdaQueryWrapper<WmsOutboundOrderDetails>()
                         .eq(WmsOutboundOrderDetails::getOutboundOrderId, order.getId())
                         .eq(WmsOutboundOrderDetails::getIsDel, 1));
 
-        boolean hasReject = false;
-        for (WmsOutboundOrderDetails d : details) {
-            WmsReviewConfirmForm.WmsReviewLineItem reviewItem = reviewMap.get(d.getId());
-            if (reviewItem != null) {
-                d.setReviewCount(reviewItem.getReviewCount());
-                d.setReviewStatus(reviewItem.getReviewStatus());
-                outboundOrderDetailsMapper.updateById(d);
+        if (details.isEmpty()) {
+            throw new JeecgBootException("出库单明细为空，无法复核");
+        }
 
-                if (Objects.equals(reviewItem.getReviewStatus(), WmsReviewStatusEnum.REJECT.getCode())) {
+        boolean hasReject = false;
+
+        if (form.getReviewLines() != null && !form.getReviewLines().isEmpty()) {
+            Map<Long, WmsReviewConfirmForm.WmsReviewLineItem> reviewMap = form.getReviewLines().stream()
+                    .collect(Collectors.toMap(WmsReviewConfirmForm.WmsReviewLineItem::getDetailId, r -> r));
+
+            for (WmsOutboundOrderDetails d : details) {
+                WmsReviewConfirmForm.WmsReviewLineItem reviewItem = reviewMap.get(d.getId());
+                if (reviewItem != null) {
+                    d.setReviewCount(reviewItem.getReviewCount());
+                    d.setReviewStatus(reviewItem.getReviewStatus());
+                    outboundOrderDetailsMapper.updateById(d);
+
+                    if (Objects.equals(reviewItem.getReviewStatus(), WmsReviewStatusEnum.REJECT.getCode())) {
+                        hasReject = true;
+                    }
+                } else {
                     hasReject = true;
                 }
-            } else {
+            }
+        } else {
+            // 整单快速复核（若未逐行指定，统一按表单整体结果流转）
+            int targetStatus = form.getReviewStatus() != null ? form.getReviewStatus() : WmsReviewStatusEnum.PASS.getCode();
+            if (Objects.equals(targetStatus, WmsReviewStatusEnum.REJECT.getCode())) {
                 hasReject = true;
+            }
+            for (WmsOutboundOrderDetails d : details) {
+                int count = hasReject ? 0 : (d.getPickedCount() != null ? d.getPickedCount() : (d.getAllocatedCount() != null ? d.getAllocatedCount() : 0));
+                d.setReviewCount(count);
+                d.setReviewStatus(hasReject ? WmsReviewStatusEnum.REJECT.getCode() : WmsReviewStatusEnum.PASS.getCode());
+                outboundOrderDetailsMapper.updateById(d);
             }
         }
 
@@ -562,6 +710,9 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
         } else {
             // 全部复核通过，推进至 60 复核通过待打包
             order.setStatus(WmsOutboundStatusEnum.REVIEWED.getCode());
+        }
+        if (form.getReviewRemark() != null && !form.getReviewRemark().trim().isEmpty()) {
+            log.info("出库单[{}]复核备注: {}", order.getOutboundCode(), form.getReviewRemark().trim());
         }
         order.setUpdateTime(now);
         updateById(order);
@@ -582,57 +733,157 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
         Date now = new Date();
         String datePrefix = new SimpleDateFormat("yyyyMMdd").format(now);
 
-        // 1. 保存打包记录
-        if (form.getPackages() != null && !form.getPackages().isEmpty()) {
-            for (WmsPackageWeightForm.WmsPackageBoxItem box : form.getPackages()) {
-                WmsOutboundOrderPackage pkg = new WmsOutboundOrderPackage();
-                pkg.setPackageCode(box.getPackageCode() != null ? box.getPackageCode() : "PKG" + datePrefix + System.currentTimeMillis() % 10000);
-                pkg.setOutboundOrderId(order.getId());
-                pkg.setOutboundOrderDetailId(box.getDetailId());
-                pkg.setSkuId(box.getSkuId());
-                pkg.setPackageCount(box.getPackageCount());
-                pkg.setPackageTime(now);
-                pkg.setCreateTime(now);
-                outboundOrderPackageMapper.insert(pkg);
-            }
-        }
-
-        // 2. 称重记录与理论重量校验
+        // 1. 查询订单明细
         List<WmsOutboundOrderDetails> details = outboundOrderDetailsMapper.selectList(
                 new LambdaQueryWrapper<WmsOutboundOrderDetails>()
                         .eq(WmsOutboundOrderDetails::getOutboundOrderId, order.getId())
                         .eq(WmsOutboundOrderDetails::getIsDel, 1));
 
-        int theoreticalWeight = 0;
+        // 2. 保存打包记录
+        if (form.getPackages() != null && !form.getPackages().isEmpty()) {
+            for (WmsPackageWeightForm.WmsPackageBoxItem box : form.getPackages()) {
+                WmsOutboundOrderPackage pkg = new WmsOutboundOrderPackage();
+                pkg.setPackageCode(box.getPackageCode() != null && !box.getPackageCode().trim().isEmpty() ? box.getPackageCode().trim() : "PKG" + datePrefix + System.currentTimeMillis() % 10000);
+                pkg.setPackageType(box.getPackageType() != null && !box.getPackageType().trim().isEmpty() ? box.getPackageType().trim() : "纸箱");
+                pkg.setOutboundOrderId(order.getId());
+                pkg.setOutboundOrderDetailId(box.getDetailId() != null ? box.getDetailId() : (!details.isEmpty() ? details.get(0).getId() : null));
+                pkg.setSkuId(box.getSkuId() != null ? box.getSkuId() : (!details.isEmpty() ? details.get(0).getSkuId() : null));
+                pkg.setPackageCount(box.getPackageCount() != null ? box.getPackageCount() : 0);
+                pkg.setPackageTime(now);
+                pkg.setIsDel(1);
+                pkg.setCreateBy(currentUsername());
+                pkg.setCreateTime(now);
+                outboundOrderPackageMapper.insert(pkg);
+            }
+        } else if (form.getWeights() != null && !form.getWeights().isEmpty()) {
+            for (WmsPackageWeightForm.WmsWeightBoxItem box : form.getWeights()) {
+                WmsOutboundOrderPackage pkg = new WmsOutboundOrderPackage();
+                pkg.setPackageCode(box.getPackageCode() != null && !box.getPackageCode().trim().isEmpty() ? box.getPackageCode().trim() : "PKG" + datePrefix + System.currentTimeMillis() % 10000);
+                pkg.setPackageType(box.getPackageType() != null && !box.getPackageType().trim().isEmpty() ? box.getPackageType().trim() : "纸箱");
+                pkg.setOutboundOrderId(order.getId());
+                pkg.setOutboundOrderDetailId(!details.isEmpty() ? details.get(0).getId() : null);
+                pkg.setSkuId(!details.isEmpty() ? details.get(0).getSkuId() : null);
+                pkg.setPackageCount(box.getPackageCount() != null ? box.getPackageCount() : 0);
+                pkg.setPackageTime(now);
+                pkg.setIsDel(1);
+                pkg.setCreateBy(currentUsername());
+                pkg.setCreateTime(now);
+                outboundOrderPackageMapper.insert(pkg);
+            }
+        } else {
+            int totalP = 0;
+            for (WmsOutboundOrderDetails d : details) {
+                int cnt = d.getPickedCount() != null ? d.getPickedCount() : (d.getAllocatedCount() != null ? d.getAllocatedCount() : 0);
+                totalP += cnt;
+            }
+            WmsOutboundOrderPackage pkg = new WmsOutboundOrderPackage();
+            pkg.setPackageCode(order.getOutboundCode() + "-BOX01");
+            pkg.setPackageType("纸箱");
+            pkg.setOutboundOrderId(order.getId());
+            pkg.setOutboundOrderDetailId(!details.isEmpty() ? details.get(0).getId() : null);
+            pkg.setSkuId(!details.isEmpty() ? details.get(0).getSkuId() : null);
+            pkg.setPackageCount(totalP);
+            pkg.setPackageTime(now);
+            pkg.setIsDel(1);
+            pkg.setCreateBy(currentUsername());
+            pkg.setCreateTime(now);
+            outboundOrderPackageMapper.insert(pkg);
+        }
+
+        // 3. 确定实测总重量（克）
+        int finalActualWeightG = 0;
+        if (form.getActualWeight() != null && form.getActualWeight() > 0) {
+            finalActualWeightG = form.getActualWeight();
+        } else if (form.getActualWeightKg() != null && form.getActualWeightKg() > 0) {
+            finalActualWeightG = (int) Math.round(form.getActualWeightKg() * 1000);
+        } else if (form.getWeights() != null && !form.getWeights().isEmpty()) {
+            double sumKg = form.getWeights().stream()
+                    .mapToDouble(w -> w.getActualWeight() != null ? w.getActualWeight() : 0.0)
+                    .sum();
+            finalActualWeightG = (int) Math.round(sumKg * 1000);
+        }
+
+        // 4. 计算订单理论重量（克），使用 SPU/SKU 标准计量换算
+        int theoreticalWeightG = 0;
         for (WmsOutboundOrderDetails d : details) {
             WmsItemSku sku = itemSkuMapper.selectById(d.getSkuId());
-            if (sku != null && sku.getProductWeight() != null) {
-                theoreticalWeight += sku.getProductWeight() * (d.getPickedCount() != null ? d.getPickedCount() : 0);
+            if (sku != null) {
+                WmsItemSpu spu = sku.getSpuId() != null ? itemSpuMapper.selectById(sku.getSpuId()) : null;
+                int unitG = WmsUnitConverter.skuUnitWeightG(sku, spu);
+                int count = d.getPickedCount() != null ? d.getPickedCount() : (d.getAllocatedCount() != null ? d.getAllocatedCount() : 0);
+                theoreticalWeightG += unitG * count;
             }
         }
 
-        if (theoreticalWeight > 0) {
-            double diffRatio = Math.abs((double) (form.getActualWeight() - theoreticalWeight)) / theoreticalWeight;
+        if (finalActualWeightG == 0 && theoreticalWeightG > 0) {
+            finalActualWeightG = theoreticalWeightG;
+        }
+
+        if (theoreticalWeightG > 0 && finalActualWeightG > 0) {
+            double diffRatio = Math.abs((double) (finalActualWeightG - theoreticalWeightG)) / theoreticalWeightG;
             if (diffRatio > 0.1) {
                 log.warn("出库单[{}]称重超差: 理论重量={}g, 实际称重={}g, 偏差率={}%",
-                        order.getOutboundCode(), theoreticalWeight, form.getActualWeight(), String.format("%.2f", diffRatio * 100));
+                        order.getOutboundCode(), theoreticalWeightG, finalActualWeightG, String.format("%.2f", diffRatio * 100));
             }
         }
 
-        WmsOutboundOrderWeights weights = new WmsOutboundOrderWeights();
-        weights.setWeightsCode("WT" + datePrefix + System.currentTimeMillis() % 10000);
-        weights.setOutboundOrderId(order.getId());
-        weights.setOutboundOrderDetailId(details.get(0).getId());
-        weights.setWeightsEmpId(0);
-        weights.setWeightsTime(now);
-        weights.setWeightVal(form.getActualWeight());
-        weights.setWeightsUnit(1); // 1克
-        weights.setCreateTime(now);
-        outboundOrderWeightsMapper.insert(weights);
+        // 5. 保存称重记录（支持按箱号逐箱记录）
+        if (form.getWeights() != null && !form.getWeights().isEmpty()) {
+            for (WmsPackageWeightForm.WmsWeightBoxItem w : form.getWeights()) {
+                WmsOutboundOrderWeights weights = new WmsOutboundOrderWeights();
+                weights.setWeightsCode("WT" + datePrefix + System.currentTimeMillis() % 10000);
+                weights.setOutboundOrderId(order.getId());
+                weights.setOutboundOrderDetailId(!details.isEmpty() ? details.get(0).getId() : null);
+                weights.setPackageCode(w.getPackageCode() != null && !w.getPackageCode().trim().isEmpty() ? w.getPackageCode().trim() : order.getOutboundCode() + "-BOX01");
+                weights.setPackageType(w.getPackageType() != null && !w.getPackageType().trim().isEmpty() ? w.getPackageType().trim() : "纸箱");
+                weights.setPackageCount(w.getPackageCount() != null ? w.getPackageCount() : 0);
+                weights.setWeightsEmpId(0);
+                weights.setWeightsTime(now);
+                double actKg = w.getActualWeight() != null ? w.getActualWeight() : (finalActualWeightG / 1000.0);
+                double theoKg = w.getTheoreticalWeight() != null ? w.getTheoreticalWeight() : (theoreticalWeightG / 1000.0);
+                double diffKg = w.getDiffWeight() != null ? w.getDiffWeight() : (actKg - theoKg);
+                int boxWeightG = (int) Math.round(actKg * 1000);
+                weights.setWeightVal(boxWeightG);
+                weights.setActualWeight(actKg);
+                weights.setTheoreticalWeight(theoKg);
+                weights.setDiffWeight(Math.round(diffKg * 1000.0) / 1000.0);
+                weights.setWeightsUnit(1); // 1克
+                weights.setIsDel(1);
+                weights.setCreateBy(currentUsername());
+                weights.setCreateTime(now);
+                outboundOrderWeightsMapper.insert(weights);
+            }
+        } else {
+            WmsOutboundOrderWeights weights = new WmsOutboundOrderWeights();
+            weights.setWeightsCode("WT" + datePrefix + System.currentTimeMillis() % 10000);
+            weights.setOutboundOrderId(order.getId());
+            weights.setOutboundOrderDetailId(!details.isEmpty() ? details.get(0).getId() : null);
+            weights.setPackageCode(order.getOutboundCode() + "-BOX01");
+            weights.setPackageType("纸箱");
+            int totalP = 0;
+            for (WmsOutboundOrderDetails d : details) {
+                int cnt = d.getPickedCount() != null ? d.getPickedCount() : (d.getAllocatedCount() != null ? d.getAllocatedCount() : 0);
+                totalP += cnt;
+            }
+            weights.setPackageCount(totalP);
+            weights.setWeightsEmpId(0);
+            weights.setWeightsTime(now);
+            double actKg = finalActualWeightG / 1000.0;
+            double theoKg = theoreticalWeightG / 1000.0;
+            weights.setWeightVal(finalActualWeightG);
+            weights.setActualWeight(actKg);
+            weights.setTheoreticalWeight(theoKg);
+            weights.setDiffWeight(Math.round((actKg - theoKg) * 1000.0) / 1000.0);
+            weights.setWeightsUnit(1); // 1克
+            weights.setIsDel(1);
+            weights.setCreateBy(currentUsername());
+            weights.setCreateTime(now);
+            outboundOrderWeightsMapper.insert(weights);
+        }
 
-        // 3. 更新单头状态为 70 已打包待发货
+        // 6. 更新单头状态为 70 已打包待发货
         order.setStatus(WmsOutboundStatusEnum.PACKED.getCode());
-        order.setTotalWeight(form.getActualWeight());
+        order.setTotalWeight(finalActualWeightG);
         if (form.getLogisticsCompanyId() != null) {
             order.setLogisticsCompanyId(form.getLogisticsCompanyId());
         }
@@ -696,13 +947,18 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
             itemSnMapper.updateById(sn);
         }
 
-        // 3. 更新出库单状态为 80 已发货
+        // 3. 更新出库单状态为 80 已发货并记录发运流水
         if (form.getLogisticsCompanyId() != null) {
             order.setLogisticsCompanyId(form.getLogisticsCompanyId());
         }
         if (form.getLogisticsNumber() != null && !form.getLogisticsNumber().trim().isEmpty()) {
             order.setLogisticsNumber(form.getLogisticsNumber().trim());
         }
+        if (form.getFreightFee() != null) {
+            order.setFreightFee(form.getFreightFee());
+        }
+        order.setShipTime(now);
+        order.setShipBy(currentUsername());
         order.setStatus(WmsOutboundStatusEnum.SHIPPED.getCode());
         order.setUpdateTime(now);
         updateById(order);
@@ -733,11 +989,19 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
         if (order.getStatus() <= WmsOutboundStatusEnum.ALLOCATED.getCode()) {
             for (WmsOutboundOrderDetails d : details) {
                 if (d.getAllocatedCount() != null && d.getAllocatedCount() > 0) {
+                    Integer areaId = d.getTargetWarehouseAreaId();
+                    if (areaId == null && d.getTargetWarehouseAreaLocaId() != null && d.getTargetWarehouseAreaLocaId() > 0) {
+                        WmsWarehouseAreaLoca loca = locaMapper.selectById(d.getTargetWarehouseAreaLocaId());
+                        if (loca != null) {
+                            areaId = loca.getWarehouseAreaId();
+                        }
+                    }
+                    Long consignorId = d.getConsignorId() != null ? d.getConsignorId() : (order.getConsignorId() != null ? order.getConsignorId() : 0L);
                     WmsInventoryDimension dimension = new WmsInventoryDimension()
                             .setWarehouseId(order.getWarehouseId())
-                            .setWarehouseAreaId(d.getTargetWarehouseAreaId())
+                            .setWarehouseAreaId(areaId)
                             .setWarehouseAreaLocaId(d.getTargetWarehouseAreaLocaId())
-                            .setConsignorId(order.getConsignorId())
+                            .setConsignorId(consignorId)
                             .setSkuId(d.getSkuId())
                             .setBatchNumber(d.getBatchNumber())
                             .setQualityStatus(1);
@@ -746,6 +1010,7 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
                             WmsInventoryBizTypeEnum.UNLOCK, order.getOutboundCode(), "取消出库单释放锁库");
 
                     d.setAllocatedCount(0);
+                    d.setUpdateTime(now);
                     outboundOrderDetailsMapper.updateById(d);
                 }
             }
@@ -753,17 +1018,29 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
             // 2. 已拣货但未发货阶段（状态 40~70）：释放锁库 + 释放SN + 生成取消返架单
             for (WmsOutboundOrderDetails d : details) {
                 if (d.getAllocatedCount() != null && d.getAllocatedCount() > 0) {
+                    Integer areaId = d.getTargetWarehouseAreaId();
+                    if (areaId == null && d.getTargetWarehouseAreaLocaId() != null && d.getTargetWarehouseAreaLocaId() > 0) {
+                        WmsWarehouseAreaLoca loca = locaMapper.selectById(d.getTargetWarehouseAreaLocaId());
+                        if (loca != null) {
+                            areaId = loca.getWarehouseAreaId();
+                        }
+                    }
+                    Long consignorId = d.getConsignorId() != null ? d.getConsignorId() : (order.getConsignorId() != null ? order.getConsignorId() : 0L);
                     WmsInventoryDimension dimension = new WmsInventoryDimension()
                             .setWarehouseId(order.getWarehouseId())
-                            .setWarehouseAreaId(d.getTargetWarehouseAreaId())
+                            .setWarehouseAreaId(areaId)
                             .setWarehouseAreaLocaId(d.getTargetWarehouseAreaLocaId())
-                            .setConsignorId(order.getConsignorId())
+                            .setConsignorId(consignorId)
                             .setSkuId(d.getSkuId())
                             .setBatchNumber(d.getBatchNumber())
                             .setQualityStatus(1);
 
                     inventoryService.applyChange(dimension, 0, -d.getAllocatedCount(), 0,
                             WmsInventoryBizTypeEnum.UNLOCK, order.getOutboundCode(), "取消出库单返架释放锁库");
+
+                    d.setAllocatedCount(0);
+                    d.setUpdateTime(now);
+                    outboundOrderDetailsMapper.updateById(d);
                 }
             }
 
@@ -783,35 +1060,65 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
 
             // 生成「取消返架单」（wms_warehouse_operations，operation_type = 4 取消返架）
             String datePrefix = new SimpleDateFormat("yyyyMMdd").format(now);
+            String jobCode = "RET" + datePrefix + String.format("%04d", (int) (System.currentTimeMillis() % 10000));
+            int suffix = 1;
+            while (operationsMapper.selectOne(new LambdaQueryWrapper<WmsWarehouseOperations>().eq(WmsWarehouseOperations::getJobCode, jobCode)) != null) {
+                jobCode = "RET" + datePrefix + String.format("%04d", (int) ((System.currentTimeMillis() + suffix++) % 10000));
+            }
+
+            String fullRemark = "取消出库单[" + order.getOutboundCode() + "]触发返架"
+                    + (reason != null && !reason.trim().isEmpty() ? ": " + reason.trim() : "");
+            if (fullRemark.length() > 200) {
+                fullRemark = fullRemark.substring(0, 200);
+            }
+
             WmsWarehouseOperations op = new WmsWarehouseOperations();
-            op.setJobCode("RET" + datePrefix + System.currentTimeMillis() % 10000)
+            op.setJobCode(jobCode)
                     .setWarehouseId(order.getWarehouseId())
+                    .setTargetWarehouseId(order.getWarehouseId())
                     .setCategory(1)
                     .setOperationType(4) // 4 取消返架
                     .setSourceType(1)
+                    .setSourceBatchId(order.getId())
                     .setStatus(WmsOperationStatusEnum.PENDING.getCode())
-                    .setRemark("取消出库单[" + order.getOutboundCode() + "]触发返架: " + (reason != null ? reason : ""))
+                    .setRemark(fullRemark)
                     .setCreateTime(now)
                     .setIsDel(1);
 
             operationsMapper.insert(op);
 
             for (WmsOutboundOrderDetails d : details) {
-                int returnCount = d.getPickedCount() != null && d.getPickedCount() > 0 ? d.getPickedCount() : d.getAllocatedCount();
+                int returnCount = (d.getPickedCount() != null && d.getPickedCount() > 0)
+                        ? d.getPickedCount()
+                        : (d.getAllocatedCount() != null && d.getAllocatedCount() > 0
+                                ? d.getAllocatedCount()
+                                : (d.getOutCount() != null ? d.getOutCount() : 0));
                 if (returnCount > 0) {
+                    Integer areaId = d.getTargetWarehouseAreaId();
+                    if (areaId == null && d.getTargetWarehouseAreaLocaId() != null && d.getTargetWarehouseAreaLocaId() > 0) {
+                        WmsWarehouseAreaLoca loca = locaMapper.selectById(d.getTargetWarehouseAreaLocaId());
+                        if (loca != null) {
+                            areaId = loca.getWarehouseAreaId();
+                        }
+                    }
+                    Long consignorId = d.getConsignorId() != null
+                            ? d.getConsignorId()
+                            : (order.getConsignorId() != null ? order.getConsignorId() : 0L);
+
                     WmsWarehouseOperationsDetails opDetail = new WmsWarehouseOperationsDetails();
                     opDetail.setWarehouseOperationsId(op.getId())
                             .setSkuId(d.getSkuId())
                             .setBatchNumber(d.getBatchNumber())
-                            .setConsignorId(order.getConsignorId())
+                            .setConsignorId(consignorId)
                             .setQualityStatus(1)
-                            .setSourceWarehouseAreaId(d.getTargetWarehouseAreaId())
+                            .setSourceWarehouseAreaId(areaId)
                             .setSourceWarehouseAreaLocaId(d.getTargetWarehouseAreaLocaId())
                             .setTargetWarehouseId(order.getWarehouseId())
-                            .setTargetWarehouseAreaId(d.getTargetWarehouseAreaId())
+                            .setTargetWarehouseAreaId(areaId)
                             .setTargetWarehouseAreaLocaId(d.getTargetWarehouseAreaLocaId())
                             .setSourceCount(returnCount)
-                            .setTargetCount(returnCount);
+                            .setTargetCount(returnCount)
+                            .setCategory(1);
                     operationsDetailsMapper.insert(opDetail);
                 }
             }
@@ -824,6 +1131,57 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
         updateById(order);
     }
 
+    @Override
+    public List<WmsOutboundOrderPackage> listPackages(Long orderId) {
+        List<WmsOutboundOrderPackage> list = outboundOrderPackageMapper.selectList(
+                new LambdaQueryWrapper<WmsOutboundOrderPackage>()
+                        .eq(WmsOutboundOrderPackage::getOutboundOrderId, orderId)
+                        .eq(WmsOutboundOrderPackage::getIsDel, 1)
+                        .orderByAsc(WmsOutboundOrderPackage::getId));
+        if (list != null && !list.isEmpty()) {
+            for (WmsOutboundOrderPackage pkg : list) {
+                if (pkg.getSkuId() != null) {
+                    WmsItemSku sku = itemSkuMapper.selectById(pkg.getSkuId());
+                    if (sku != null) {
+                        pkg.setSkuCode(sku.getCode());
+                        pkg.setSkuName(sku.getTitle() != null ? sku.getTitle() : sku.getCode());
+                    }
+                }
+            }
+        }
+        return list;
+    }
+
+    @Override
+    public List<WmsOutboundOrderWeights> listWeights(Long orderId) {
+        return outboundOrderWeightsMapper.selectList(
+                new LambdaQueryWrapper<WmsOutboundOrderWeights>()
+                        .eq(WmsOutboundOrderWeights::getOutboundOrderId, orderId)
+                        .eq(WmsOutboundOrderWeights::getIsDel, 1)
+                        .orderByAsc(WmsOutboundOrderWeights::getId));
+    }
+
+    @Override
+    public List<WmsItemSn> listSns(Long orderId) {
+        List<WmsItemSn> list = itemSnMapper.selectList(
+                new LambdaQueryWrapper<WmsItemSn>()
+                        .eq(WmsItemSn::getOutboundOrderId, orderId)
+                        .eq(WmsItemSn::getIsDel, 1)
+                        .orderByAsc(WmsItemSn::getId));
+        if (list != null && !list.isEmpty()) {
+            for (WmsItemSn sn : list) {
+                if (sn.getSkuId() != null) {
+                    WmsItemSku sku = itemSkuMapper.selectById(sn.getSkuId());
+                    if (sku != null) {
+                        sn.setSkuCode(sku.getCode());
+                        sn.setSkuName(sku.getTitle() != null ? sku.getTitle() : sku.getCode());
+                    }
+                }
+            }
+        }
+        return list;
+    }
+
     private String generateOutboundCode(String datePrefix) {
         String base = "OB" + datePrefix;
         int seq = 1;
@@ -833,6 +1191,18 @@ public class WmsOutboundOrderServiceImpl extends ServiceImpl<WmsOutboundOrderMap
             full = base + String.format("%04d", seq);
         }
         return full;
+    }
+
+    private String currentUsername() {
+        try {
+            Object principal = org.apache.shiro.SecurityUtils.getSubject().getPrincipal();
+            if (principal instanceof org.jeecg.common.system.vo.LoginUser) {
+                return ((org.jeecg.common.system.vo.LoginUser) principal).getUsername();
+            }
+        } catch (Exception e) {
+            log.debug("获取登录用户失败", e);
+        }
+        return null;
     }
 
     private static class AllocatedRecord {

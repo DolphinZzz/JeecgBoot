@@ -29,4 +29,8 @@ public class WmsShipConfirmForm implements Serializable {
     /** 最终物流运单号 */
     @Schema(description = "物流运单号")
     private String logisticsNumber;
+
+    /** 物流运费(元) */
+    @Schema(description = "物流运费(元)")
+    private Double freightFee;
 }

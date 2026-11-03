@@ -3,7 +3,10 @@ package org.jeecg.modules.wms.service;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.jeecg.modules.wms.dto.ErpOutboundOrderCreateDto;
+import org.jeecg.modules.wms.entity.WmsItemSn;
 import org.jeecg.modules.wms.entity.WmsOutboundOrder;
+import org.jeecg.modules.wms.entity.WmsOutboundOrderPackage;
+import org.jeecg.modules.wms.entity.WmsOutboundOrderWeights;
 import org.jeecg.modules.wms.vo.*;
 
 import java.util.List;
@@ -70,4 +73,19 @@ public interface IWmsOutboundOrderService extends IService<WmsOutboundOrder> {
      * 逆向分支：取消出库单（未拣货释放锁库，已拣货未发货生成取消返架作业单并释放SN/锁库，已发货硬拦截）
      */
     void cancelOutboundOrder(Long orderId, String reason);
+
+    /**
+     * 查询出库单包装箱单清单
+     */
+    List<WmsOutboundOrderPackage> listPackages(Long orderId);
+
+    /**
+     * 查询出库单称重记录清单
+     */
+    List<WmsOutboundOrderWeights> listWeights(Long orderId);
+
+    /**
+     * 查询出库单关联SN序列号清单
+     */
+    List<WmsItemSn> listSns(Long orderId);
 }

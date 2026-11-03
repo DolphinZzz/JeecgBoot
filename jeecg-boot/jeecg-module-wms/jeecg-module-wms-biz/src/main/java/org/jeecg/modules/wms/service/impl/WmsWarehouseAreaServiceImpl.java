@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import org.jeecg.common.exception.JeecgBootException;
 import org.jeecg.common.util.oConvertUtils;
+import org.jeecg.modules.wms.entity.WmsInventory;
 import org.jeecg.modules.wms.entity.WmsWarehouseArea;
 import org.jeecg.modules.wms.entity.WmsWarehouseAreaLoca;
+import org.jeecg.modules.wms.mapper.WmsInventoryMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaLocaMapper;
 import org.jeecg.modules.wms.mapper.WmsWarehouseAreaMapper;
 import org.jeecg.modules.wms.service.IWmsWarehouseAreaService;
@@ -16,7 +18,13 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 
 import java.io.Serializable;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * @Description: 库区管理
@@ -31,6 +39,9 @@ public class WmsWarehouseAreaServiceImpl extends ServiceImpl<WmsWarehouseAreaMap
 
     @Autowired
     private WmsWarehouseAreaLocaMapper warehouseAreaLocaMapper;
+
+    @Autowired
+    private WmsInventoryMapper inventoryMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -120,8 +131,55 @@ public class WmsWarehouseAreaServiceImpl extends ServiceImpl<WmsWarehouseAreaMap
         if (oConvertUtils.isEmpty(entity.getCategory())) {
             entity.setCategory("STORAGE");
         }
-        if (oConvertUtils.isEmpty(entity.getZoneType())) {
-            entity.setZoneType("GENERAL");
+    }
+
+    @Override
+    public void fillAreaStatistics(List<WmsWarehouseArea> records) {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        List<Integer> areaIds = records.stream()
+                .map(WmsWarehouseArea::getId)
+                .filter(id -> id != null)
+                .collect(Collectors.toList());
+        if (areaIds.isEmpty()) {
+            return;
+        }
+
+        List<WmsWarehouseAreaLoca> locas = warehouseAreaLocaMapper.selectList(new LambdaQueryWrapper<WmsWarehouseAreaLoca>()
+                .in(WmsWarehouseAreaLoca::getWarehouseAreaId, areaIds)
+                .eq(WmsWarehouseAreaLoca::getIsDel, 1));
+        Map<Integer, List<WmsWarehouseAreaLoca>> areaLocasMap = locas.stream()
+                .collect(Collectors.groupingBy(WmsWarehouseAreaLoca::getWarehouseAreaId));
+
+        List<WmsInventory> invs = inventoryMapper.selectList(new LambdaQueryWrapper<WmsInventory>()
+                .in(WmsInventory::getWarehouseAreaId, areaIds)
+                .gt(WmsInventory::getTotalCount, 0));
+
+        Map<Integer, Set<Integer>> areaOccupiedLocaIdsMap = new HashMap<>();
+        Map<Integer, Integer> areaTotalItemCountMap = new HashMap<>();
+        for (WmsInventory inv : invs) {
+            areaOccupiedLocaIdsMap.computeIfAbsent(inv.getWarehouseAreaId(), k -> new HashSet<>()).add(inv.getWarehouseAreaLocaId());
+            areaTotalItemCountMap.merge(inv.getWarehouseAreaId(), inv.getTotalCount() == null ? 0 : inv.getTotalCount(), Integer::sum);
+        }
+
+        for (WmsWarehouseArea area : records) {
+            List<WmsWarehouseAreaLoca> areaLocaList = areaLocasMap.getOrDefault(area.getId(), Collections.emptyList());
+            int total = areaLocaList.size();
+            Set<Integer> occupiedLocaIds = areaOccupiedLocaIdsMap.getOrDefault(area.getId(), Collections.emptySet());
+            int occupied = 0;
+            int empty = 0;
+            for (WmsWarehouseAreaLoca loca : areaLocaList) {
+                if (occupiedLocaIds.contains(loca.getId())) {
+                    occupied++;
+                } else if (loca.getLocaStatus() != null && loca.getLocaStatus() == 1) {
+                    empty++;
+                }
+            }
+            area.setTotalLocaCount(total);
+            area.setEmptyLocaCount(empty);
+            area.setOccupiedLocaCount(occupied);
+            area.setTotalItemCount(areaTotalItemCountMap.getOrDefault(area.getId(), 0));
         }
     }
 }

@@ -29,6 +29,9 @@ public class WmsInventoryQuery {
     /**SKU 编码（模糊）*/
     private String skuCode;
 
+    /**商品编码（模糊）*/
+    private String spuCode;
+
     /**商品名称（模糊）*/
     private String spuTitle;
 

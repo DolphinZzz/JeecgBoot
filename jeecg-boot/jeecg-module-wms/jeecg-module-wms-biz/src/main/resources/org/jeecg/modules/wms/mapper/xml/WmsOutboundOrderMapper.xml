@@ -7,7 +7,7 @@
             o.id, o.outbound_code, o.outbound_type, o.pick_mode, o.wave_id,
             o.erp_order_no, o.mes_work_order_no, o.customer_id, o.warehouse_id, o.consignor_id,
             o.status, o.total_count, o.total_weight, o.total_volume, o.price,
-            o.logistics_company_id, o.logistics_number,
+            o.logistics_company_id, o.logistics_number, o.freight_fee, o.ship_time, o.ship_by,
             o.create_time, o.create_by,
             w.name AS warehouse_name,
             w.warehouse_type AS warehouse_type,

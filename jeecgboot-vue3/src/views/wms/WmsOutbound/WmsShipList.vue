@@ -1,5 +1,11 @@
 <template>
   <div>
+    <a-tabs v-model:activeKey="activeTabKey" @change="handleTabChange" style="background: #fff; padding: 12px 16px 0">
+      <a-tab-pane key="70" tab="待发货 (70)" />
+      <a-tab-pane key="80" tab="已发货 (80)" />
+      <a-tab-pane key="ALL" tab="全部单据" />
+    </a-tabs>
+
     <BasicTable @register="registerTable">
       <template #action="{ record }">
         <TableAction :actions="getTableAction(record)" />
@@ -13,7 +19,7 @@
 </template>
 
 <script lang="ts" name="wms-wmsShip" setup>
-  import { reactive } from 'vue';
+  import { ref } from 'vue';
   import { BasicTable, TableAction, ActionItem } from '/@/components/Table';
   import { useModal } from '/@/components/Modal';
   import { useDrawer } from '/@/components/Drawer';
@@ -23,9 +29,7 @@
   import { columns, searchFormSchema } from './WmsOutbound.data';
   import { list } from './WmsOutbound.api';
 
-  const queryParam = reactive<any>({
-    status: 70, // 默认展示已打包待发货
-  });
+  const activeTabKey = ref('70');
 
   const [registerShipModal, { openModal: openShipModal }] = useModal();
   const [registerDetailDrawer, { openDrawer: openDetailDrawer }] = useDrawer();
@@ -49,12 +53,22 @@
         slots: { customRender: 'action' },
       },
       beforeFetch: (params) => {
-        return Object.assign(params, queryParam);
+        const p = Object.assign({}, params);
+        if (activeTabKey.value !== 'ALL') {
+          p.status = Number(activeTabKey.value);
+        } else {
+          delete p.status;
+        }
+        return p;
       },
     },
   });
 
   const [registerTable, { reload }] = tableContext;
+
+  function handleTabChange() {
+    reload();
+  }
 
   function handleShip(record: Recordable) {
     openShipModal(true, { record });
@@ -65,16 +79,18 @@
   }
 
   function getTableAction(record: Recordable): ActionItem[] {
-    return [
-      {
+    const actions: ActionItem[] = [];
+    if (record.status === 70) {
+      actions.push({
         label: '发运确认',
         onClick: handleShip.bind(null, record),
         auth: 'wms:wms_outbound_order:shipConfirm',
-      },
-      {
-        label: '详情',
-        onClick: handleViewDetail.bind(null, record),
-      },
-    ];
+      });
+    }
+    actions.push({
+      label: record.status >= 80 ? '发运详情' : '详情',
+      onClick: handleViewDetail.bind(null, record),
+    });
+    return actions;
   }
 </script>

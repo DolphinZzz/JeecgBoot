@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.wms.mapper.WmsLocaItemCapacityMapper">
+
+    <select id="selectByLocaId" resultType="org.jeecg.modules.wms.entity.WmsLocaItemCapacity">
+        SELECT id, warehouse_id, warehouse_area_id, warehouse_area_loca_id, spu_id, max_count, remark,
+               create_by, create_time, update_by, update_time, is_del
+        FROM wms_loca_item_capacity
+        WHERE warehouse_area_loca_id = #{locaId}
+          AND is_del = 1
+        ORDER BY id ASC
+    </select>
+
+    <select id="selectByLocaIds" resultType="org.jeecg.modules.wms.entity.WmsLocaItemCapacity">
+        SELECT id, warehouse_id, warehouse_area_id, warehouse_area_loca_id, spu_id, max_count, remark,
+               create_by, create_time, update_by, update_time, is_del
+        FROM wms_loca_item_capacity
+        WHERE warehouse_area_loca_id IN
+        <foreach collection="locaIds" item="locaId" open="(" separator="," close=")">
+            #{locaId}
+        </foreach>
+          AND is_del = 1
+        ORDER BY warehouse_area_loca_id ASC, id ASC
+    </select>
+
+    <select id="selectByWarehouseAndSpu" resultType="org.jeecg.modules.wms.entity.WmsLocaItemCapacity">
+        SELECT id, warehouse_id, warehouse_area_id, warehouse_area_loca_id, spu_id, max_count, remark,
+               create_by, create_time, update_by, update_time, is_del
+        FROM wms_loca_item_capacity
+        WHERE spu_id = #{spuId}
+        <if test="warehouseId != null">
+          AND warehouse_id = #{warehouseId}
+        </if>
+          AND is_del = 1
+        ORDER BY warehouse_area_loca_id ASC
+    </select>
+
+</mapper>

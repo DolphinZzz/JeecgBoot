@@ -41,11 +41,17 @@ public class WmsWarehouseOperations implements Serializable {
     @Schema(description = "作业单号")
     private String jobCode;
 
-    /**仓库ID*/
-    @Excel(name = "所属仓库", width = 15, dictTable = "wms_warehouse", dicText = "name", dicCode = "id")
+    /**仓库ID (调出仓库)*/
+    @Excel(name = "调出仓库", width = 15, dictTable = "wms_warehouse", dicText = "name", dicCode = "id")
     @Dict(dictTable = "wms_warehouse", dicText = "name", dicCode = "id")
-    @Schema(description = "仓库ID")
+    @Schema(description = "仓库ID(调出仓库)")
     private Integer warehouseId;
+
+    /**目标仓库ID (调入仓库，跨仓移库时为调入仓库ID，同仓移库等于warehouseId)*/
+    @Excel(name = "调入仓库", width = 15, dictTable = "wms_warehouse", dicText = "name", dicCode = "id")
+    @Dict(dictTable = "wms_warehouse", dicText = "name", dicCode = "id")
+    @Schema(description = "目标仓库ID(调入仓库)")
+    private Integer targetWarehouseId;
 
     /**作业类型(数据字典，保留既有字段，新逻辑以 operationType 为准)*/
     @Schema(description = "作业类型", hidden = true)

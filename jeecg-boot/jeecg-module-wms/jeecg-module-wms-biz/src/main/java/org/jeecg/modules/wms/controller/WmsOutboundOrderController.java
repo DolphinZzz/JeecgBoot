@@ -8,7 +8,10 @@ import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.jeecg.common.api.vo.Result;
 import org.jeecg.common.aspect.annotation.AutoLog;
 import org.jeecg.modules.wms.dto.ErpOutboundOrderCreateDto;
+import org.jeecg.modules.wms.entity.WmsItemSn;
 import org.jeecg.modules.wms.entity.WmsOutboundOrder;
+import org.jeecg.modules.wms.entity.WmsOutboundOrderPackage;
+import org.jeecg.modules.wms.entity.WmsOutboundOrderWeights;
 import org.jeecg.modules.wms.service.IWmsOutboundOrderService;
 import org.jeecg.modules.wms.vo.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +61,33 @@ public class WmsOutboundOrderController {
     @GetMapping(value = "/queryDetails")
     public Result<List<WmsOutboundDetailView>> queryDetails(@RequestParam(name = "id") Long id) {
         return Result.OK(outboundOrderService.listDetails(id));
+    }
+
+    /**
+     * 出库单打包箱单列表
+     */
+    @Operation(summary = "出库单-包装箱单列表查询")
+    @GetMapping(value = "/queryPackages")
+    public Result<List<WmsOutboundOrderPackage>> queryPackages(@RequestParam(name = "id") Long id) {
+        return Result.OK(outboundOrderService.listPackages(id));
+    }
+
+    /**
+     * 出库单称重记录列表
+     */
+    @Operation(summary = "出库单-称重记录列表查询")
+    @GetMapping(value = "/queryWeights")
+    public Result<List<WmsOutboundOrderWeights>> queryWeights(@RequestParam(name = "id") Long id) {
+        return Result.OK(outboundOrderService.listWeights(id));
+    }
+
+    /**
+     * 出库单SN追溯列表
+     */
+    @Operation(summary = "出库单-SN追溯列表查询")
+    @GetMapping(value = "/querySns")
+    public Result<List<WmsItemSn>> querySns(@RequestParam(name = "id") Long id) {
+        return Result.OK(outboundOrderService.listSns(id));
     }
 
     /**

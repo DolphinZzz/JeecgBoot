@@ -38,8 +38,8 @@
         SELECT
             d.sku_id,
             k.code AS sku_code,
-            k.sku_name AS sku_name,
-            k.bar_code AS bar_code,
+            COALESCE(k.title, s.title) AS sku_name,
+            k.code AS bar_code,
             d.batch_number,
             d.target_warehouse_area_loca_id AS warehouse_area_loca_id,
             l.loca_code,
@@ -47,10 +47,11 @@
         FROM wms_outbound_order o
         JOIN wms_outbound_order_details d ON d.outbound_order_id = o.id AND d.is_del = 1
         LEFT JOIN wms_item_sku k ON k.id = d.sku_id
+        LEFT JOIN wms_item_spu s ON s.id = k.spu_id
         LEFT JOIN wms_warehouse_area_loca l ON l.id = d.target_warehouse_area_loca_id
         WHERE o.wave_id = #{waveId}
           AND o.is_del = 1
-        GROUP BY d.sku_id, k.code, k.sku_name, k.bar_code, d.batch_number, d.target_warehouse_area_loca_id, l.loca_code
+        GROUP BY d.sku_id, k.code, COALESCE(k.title, s.title), k.code, d.batch_number, d.target_warehouse_area_loca_id, l.loca_code
         ORDER BY l.loca_code ASC, d.sku_id ASC
     </select>
 

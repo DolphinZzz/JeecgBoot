@@ -123,6 +123,21 @@ public class WmsOutboundOrder implements Serializable {
     @Schema(description = "物流单号")
     private String logisticsNumber;
 
+    /** 物流运费(元) */
+    @Excel(name = "物流运费", width = 12)
+    @Schema(description = "物流运费(元)")
+    private Double freightFee;
+
+    /** 发运出库时间 */
+    @JsonFormat(timezone = "GMT+8", pattern = "yyyy-MM-dd HH:mm:ss")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @Schema(description = "发运出库时间")
+    private Date shipTime;
+
+    /** 发货确认人账号 */
+    @Schema(description = "发货确认人账号")
+    private String shipBy;
+
     /** SaaS标识 */
     @Schema(description = "SaaS标识", hidden = true)
     private String saasId;
@@ -150,5 +165,5 @@ public class WmsOutboundOrder implements Serializable {
     /** 是否删除 1未删除 2已删除 */
     @TableLogic(value = "1", delval = "2")
     @Schema(description = "是否删除 1未删除 2已删除")
-    private Integer isDel;
+    private Integer isDel = 1;
 }

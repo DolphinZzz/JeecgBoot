@@ -33,6 +33,10 @@ public class WmsOperationDetailForm {
     @Schema(description = "移出库位ID")
     private Integer sourceWarehouseAreaLocaId;
 
+    /**目标仓库ID（选填，未传则继承表头目标仓库）*/
+    @Schema(description = "目标仓库ID")
+    private Integer targetWarehouseId;
+
     /**移入库位ID（补货时由后端按 FEFO 推荐，可留空）*/
     @Schema(description = "移入库位ID")
     private Integer targetWarehouseAreaLocaId;

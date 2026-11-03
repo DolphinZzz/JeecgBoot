@@ -26,6 +26,7 @@
             a.name AS area_name,
             l.loca_code,
             l.storage_condition,
+            p.sub_title AS spu_code,
             s.code AS sku_code,
             p.title AS spu_title,
             c.consignor_name AS consignor_name,
@@ -55,6 +56,9 @@
         </if>
         <if test="q.skuCode != null and q.skuCode != ''">
             AND s.code LIKE CONCAT('%', #{q.skuCode}, '%')
+        </if>
+        <if test="q.spuCode != null and q.spuCode != ''">
+            AND p.sub_title LIKE CONCAT('%', #{q.spuCode}, '%')
         </if>
         <if test="q.spuTitle != null and q.spuTitle != ''">
             AND p.title LIKE CONCAT('%', #{q.spuTitle}, '%')
@@ -149,5 +153,221 @@
         <if test="skuId != null">
             AND i.sku_id = #{skuId}
         </if>
+    </select>
+
+    <!--
+      Tab 1: 库位列表分页查询（按物理库位与实际库存聚合展示：绑定SKU、在库批次、真实总件数、可用、锁定、冻结）
+    -->
+    <select id="selectLocaPage" resultType="org.jeecg.modules.wms.vo.WmsInventoryLocaPageVO">
+        SELECT
+            l.id AS loca_id,
+            l.loca_code,
+            l.warehouse_id,
+            w.name AS warehouse_name,
+            l.warehouse_area_id,
+            a.name AS area_name,
+            a.category AS area_category,
+            l.tunnel_number,
+            l.shelf_number,
+            l.layer_number,
+            l.position_number,
+            l.loca_status,
+            l.storage_condition,
+            l.allow_mix_sku,
+            l.allow_mix_batch,
+            l.fixed_sku_id,
+            IFNULL(inv.total_count, 0) AS total_count,
+            IFNULL(inv.total_count, 0) AS current_count,
+            IFNULL(inv.available_count, 0) AS available_count,
+            IFNULL(inv.locked_count, 0) AS locked_count,
+            IFNULL(inv.frozen_count, 0) AS frozen_count,
+            inv.batch_number,
+            COALESCE(inv.sku_id, l.fixed_sku_id) AS bound_sku_id,
+            sku.code AS sku_code,
+            COALESCE(sku.title, sku.spec) AS sku_name,
+            spu.title AS spu_name,
+            CASE WHEN IFNULL(inv.total_count, 0) &gt; 0 THEN 1 ELSE 0 END AS is_occupied,
+            CASE WHEN IFNULL(inv.sku_type_count, 0) &gt; 1 THEN 1 ELSE 0 END AS is_mixed
+        FROM wms_warehouse_area_loca l
+        LEFT JOIN wms_warehouse w ON w.id = l.warehouse_id
+        LEFT JOIN wms_warehouse_area a ON a.id = l.warehouse_area_id
+        LEFT JOIN (
+            SELECT
+                warehouse_area_loca_id,
+                SUM(total_count) AS total_count,
+                SUM(available_count) AS available_count,
+                SUM(locked_count) AS locked_count,
+                SUM(frozen_count) AS frozen_count,
+                MAX(batch_number) AS batch_number,
+                MAX(sku_id) AS sku_id,
+                COUNT(DISTINCT sku_id) AS sku_type_count
+            FROM wms_inventory
+            WHERE is_del = 1
+            GROUP BY warehouse_area_loca_id
+        ) inv ON inv.warehouse_area_loca_id = l.id
+        LEFT JOIN wms_item_sku sku ON sku.id = COALESCE(inv.sku_id, l.fixed_sku_id)
+        LEFT JOIN wms_item_spu spu ON spu.id = sku.spu_id
+        WHERE l.is_del = 1
+        <if test="q.warehouseId != null">
+            AND l.warehouse_id = #{q.warehouseId}
+        </if>
+        <if test="q.warehouseAreaId != null">
+            AND l.warehouse_area_id = #{q.warehouseAreaId}
+        </if>
+        <if test="q.locaCode != null and q.locaCode != ''">
+            AND l.loca_code LIKE CONCAT('%', #{q.locaCode}, '%')
+        </if>
+        <if test="q.locaStatus != null">
+            AND l.loca_status = #{q.locaStatus}
+        </if>
+        <if test="q.isOccupied != null">
+            <choose>
+                <when test="q.isOccupied == 1">
+                    AND IFNULL(inv.total_count, 0) &gt; 0
+                </when>
+                <otherwise>
+                    AND IFNULL(inv.total_count, 0) = 0
+                </otherwise>
+            </choose>
+        </if>
+        <if test="q.skuId != null">
+            AND (inv.sku_id = #{q.skuId} OR l.fixed_sku_id = #{q.skuId})
+        </if>
+        <if test="q.skuKeyword != null and q.skuKeyword != ''">
+            AND (
+                sku.code LIKE CONCAT('%', #{q.skuKeyword}, '%')
+                OR sku.title LIKE CONCAT('%', #{q.skuKeyword}, '%')
+                OR spu.title LIKE CONCAT('%', #{q.skuKeyword}, '%')
+            )
+        </if>
+        <if test="q.spuKeyword != null and q.spuKeyword != ''">
+            AND (
+                sku.code LIKE CONCAT('%', #{q.spuKeyword}, '%')
+                OR spu.title LIKE CONCAT('%', #{q.spuKeyword}, '%')
+            )
+        </if>
+        ORDER BY l.warehouse_id ASC, l.warehouse_area_id ASC, l.loca_code ASC
+    </select>
+
+    <!--
+      Tab 2: 全周期库存台账分页查询
+      涵盖：商品编码、商品名称、规格编码、库存数量、在库库位数、可用数量、锁定数量、冻结数量、
+            待卸货数量、待分拣数量、已分拣数量、欠货数量。
+    -->
+    <select id="selectLedgerPage" resultType="org.jeecg.modules.wms.vo.WmsInventoryLedgerVO">
+        SELECT
+            sku.id AS sku_id,
+            spu.id AS spu_id,
+            spu.sub_title AS spu_code,
+            spu.title AS spu_name,
+            sku.code AS sku_code,
+            sku.code AS bar_code,
+            <if test="q.warehouseId != null">
+                #{q.warehouseId} AS warehouse_id,
+                (SELECT name FROM wms_warehouse WHERE id = #{q.warehouseId}) AS warehouse_name,
+            </if>
+            <if test="q.warehouseId == null">
+                NULL AS warehouse_id,
+                '全仓汇总' AS warehouse_name,
+            </if>
+            IFNULL(inv.total_count, 0) AS total_count,
+            IFNULL(inv.loca_count, 0) AS in_stock_loca_count,
+            IFNULL(inv.available_count, 0) AS available_count,
+            IFNULL(inv.locked_count, 0) AS locked_count,
+            IFNULL(inv.frozen_count, 0) AS frozen_count,
+            IFNULL(unload.pending_unload_count, 0) AS pending_unload_count,
+            IFNULL(psort.pending_sort_count, 0) AS pending_sort_count,
+            IFNULL(sortd.sorted_count, 0) AS sorted_count,
+            IFNULL(shortage.shortage_count, 0) AS shortage_count
+        FROM wms_item_sku sku
+        JOIN wms_item_spu spu ON spu.id = sku.spu_id AND spu.is_del = 1
+        LEFT JOIN (
+            SELECT
+                sku_id,
+                SUM(total_count) AS total_count,
+                COUNT(DISTINCT warehouse_area_loca_id) AS loca_count,
+                SUM(available_count) AS available_count,
+                SUM(locked_count) AS locked_count,
+                SUM(frozen_count) AS frozen_count
+            FROM wms_inventory
+            WHERE is_del = 1
+            <if test="q.warehouseId != null">
+                AND warehouse_id = #{q.warehouseId}
+            </if>
+            GROUP BY sku_id
+        ) inv ON inv.sku_id = sku.id
+        LEFT JOIN (
+            SELECT
+                d.sku_id,
+                SUM(GREATEST(0, d.count - IFNULL(d.received_count, 0))) AS pending_unload_count
+            FROM wms_warehousing_entry_details d
+            JOIN wms_warehousing_entry e ON e.id = d.warehousing_entry_id
+            WHERE e.is_del = 1 AND d.is_del = 1
+              AND e.status IN (10, 20)
+            <if test="q.warehouseId != null">
+                AND e.warehouse_id = #{q.warehouseId}
+            </if>
+            GROUP BY d.sku_id
+        ) unload ON unload.sku_id = sku.id
+        LEFT JOIN (
+            SELECT
+                s.sku_id,
+                SUM(IFNULL(s.count, 0)) AS pending_sort_count
+            FROM wms_warehousing_entry_details_sort s
+            JOIN wms_warehousing_entry_details d ON d.id = s.warehousing_entry_details_id
+            JOIN wms_warehousing_entry e ON e.id = d.warehousing_entry_id
+            WHERE s.is_del = 1 AND e.is_del = 1
+              AND s.status = 1
+            <if test="q.warehouseId != null">
+                AND e.warehouse_id = #{q.warehouseId}
+            </if>
+            GROUP BY s.sku_id
+        ) psort ON psort.sku_id = sku.id
+        LEFT JOIN (
+            SELECT
+                s.sku_id,
+                SUM(IFNULL(s.count, 0)) AS sorted_count
+            FROM wms_warehousing_entry_details_sort s
+            JOIN wms_warehousing_entry_details d ON d.id = s.warehousing_entry_details_id
+            JOIN wms_warehousing_entry e ON e.id = d.warehousing_entry_id
+            WHERE s.is_del = 1 AND e.is_del = 1
+              AND s.status = 2
+            <if test="q.warehouseId != null">
+                AND e.warehouse_id = #{q.warehouseId}
+            </if>
+            GROUP BY s.sku_id
+        ) sortd ON sortd.sku_id = sku.id
+        LEFT JOIN (
+            SELECT
+                od.sku_id,
+                SUM(GREATEST(0, od.out_count - IFNULL(od.allocated_count, 0))) AS shortage_count
+            FROM wms_outbound_order_details od
+            JOIN wms_outbound_order o ON o.id = od.outbound_order_id
+            WHERE od.is_del = 1 AND o.is_del = 1
+              AND o.status NOT IN (80, 90, 91)
+              AND od.out_count &gt; IFNULL(od.allocated_count, 0)
+            <if test="q.warehouseId != null">
+                AND o.warehouse_id = #{q.warehouseId}
+            </if>
+            GROUP BY od.sku_id
+        ) shortage ON shortage.sku_id = sku.id
+        WHERE sku.is_del = 1
+        <if test="q.spuCode != null and q.spuCode != ''">
+            AND spu.sub_title LIKE CONCAT('%', #{q.spuCode}, '%')
+        </if>
+        <if test="q.spuName != null and q.spuName != ''">
+            AND spu.title LIKE CONCAT('%', #{q.spuName}, '%')
+        </if>
+        <if test="q.skuCode != null and q.skuCode != ''">
+            AND sku.code LIKE CONCAT('%', #{q.skuCode}, '%')
+        </if>
+        <if test="q.keyword != null and q.keyword != ''">
+            AND (
+                spu.title LIKE CONCAT('%', #{q.keyword}, '%')
+                OR spu.sub_title LIKE CONCAT('%', #{q.keyword}, '%')
+                OR sku.code LIKE CONCAT('%', #{q.keyword}, '%')
+            )
+        </if>
+        ORDER BY spu.id DESC, sku.id ASC
     </select>
 </mapper>

@@ -186,6 +186,9 @@ public class WmsWarehousingEntryServiceImpl
     @Autowired
     private IWmsPutawayService putawayService;
 
+    @Autowired
+    private org.jeecg.modules.wms.service.IWmsLocaCompatibilityService locaCompatibilityService;
+
     // ==================================================================
     // 建单
     // ==================================================================
@@ -1337,7 +1340,6 @@ public class WmsWarehousingEntryServiceImpl
                     .setWarehouseId(targetWhId)
                     .setName("退货不良品区")
                     .setCategory(AREA_RETURN)
-                    .setZoneType("GENERAL")
                     .setStorageCondition("NORMAL")
                     .setCreateTime(new Date())
                     .setCreateBy("system")
@@ -1542,18 +1544,11 @@ public class WmsWarehousingEntryServiceImpl
         }
     }
 
-    /** 库位占用体积 / 重量累加，库位空 → 占用 */
+    /** 刷新库位占用体积、重量、状态与绑定 */
     private void touchLocaUsage(Integer locaId, int addVolume, int addWeight) {
-        WmsWarehouseAreaLoca loca = locaMapper.selectById(locaId);
-        if (loca == null) {
-            return;
+        if (locaCompatibilityService != null && locaId != null) {
+            locaCompatibilityService.refreshLocaOccupancy(locaId);
         }
-        locaMapper.updateById(new WmsWarehouseAreaLoca()
-                .setId(locaId)
-                .setUsedVolume(countOf(loca.getUsedVolume()) + addVolume)
-                .setUsedWeight(countOf(loca.getUsedWeight()) + addWeight)
-                .setLocaStatus(LOCA_STATUS_OCCUPIED)
-                .setUpdateTime(new Date()));
     }
 
     /** 取该明细最近一条分拣行 */

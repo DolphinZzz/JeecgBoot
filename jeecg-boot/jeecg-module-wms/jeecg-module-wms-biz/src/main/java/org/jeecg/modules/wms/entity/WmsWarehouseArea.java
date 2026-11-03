@@ -67,12 +67,6 @@ public class WmsWarehouseArea implements Serializable {
     @Schema(description = "ABC分类 A/B/C")
     private String abcClass;
 
-    /**分区类型(字典 wms_zone_type)*/
-    @Excel(name = "分区类型", width = 15, dicCode = "wms_zone_type")
-    @Dict(dicCode = "wms_zone_type")
-    @Schema(description = "分区类型(GENERAL通用 SMALL小件 LARGE大件 VALUABLE贵品)")
-    private String zoneType;
-
     /**SaaS标识*/
     @Schema(description = "SaaS标识", hidden = true)
     private String saasId;
@@ -101,4 +95,24 @@ public class WmsWarehouseArea implements Serializable {
     @TableLogic(value = "1", delval = "2")
     @Schema(description = "是否删除 1未删除 2已删除")
     private Integer isDel;
+
+    /**总库位数*/
+    @TableField(exist = false)
+    @Schema(description = "总库位数")
+    private Integer totalLocaCount;
+
+    /**空闲库位数*/
+    @TableField(exist = false)
+    @Schema(description = "空闲库位数")
+    private Integer emptyLocaCount;
+
+    /**占用库位数*/
+    @TableField(exist = false)
+    @Schema(description = "占用库位数")
+    private Integer occupiedLocaCount;
+
+    /**在库总件数*/
+    @TableField(exist = false)
+    @Schema(description = "在库总件数")
+    private Integer totalItemCount;
 }

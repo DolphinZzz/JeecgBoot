@@ -3,9 +3,7 @@ package org.jeecg.modules.wms.enums;
 /**
  * 上架排序策略（方案 3.5.1 第 2 层）。与字典 wms_putaway_strategy 一一对应。
  *
- * 「分区上架」不是独立策略，而是第 1 层硬过滤里的 zone_type 匹配，
- * 所以这里只有三种排序规则。SKU 未配置时取
- * wms_strategy_config.putaway_default_strategy（默认 ABC）。
+ * SKU 未配置时取 wms_strategy_config.putaway_default_strategy（默认 ABC）。
  */
 public enum WmsPutawayStrategyEnum {
 

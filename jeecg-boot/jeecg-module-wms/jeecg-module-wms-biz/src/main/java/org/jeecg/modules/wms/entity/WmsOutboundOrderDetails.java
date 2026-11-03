@@ -146,5 +146,5 @@ public class WmsOutboundOrderDetails implements Serializable {
     /** 是否删除 1未删除 2已删除 */
     @TableLogic(value = "1", delval = "2")
     @Schema(description = "是否删除 1未删除 2已删除")
-    private Integer isDel;
+    private Integer isDel = 1;
 }

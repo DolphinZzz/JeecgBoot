@@ -103,7 +103,7 @@
       actionColumn: {
         title: '操作',
         dataIndex: 'action',
-        width: 120,
+        width: 170,
         fixed: 'right',
         slots: { customRender: 'action' },
       },

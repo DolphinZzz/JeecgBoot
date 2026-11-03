@@ -119,6 +119,20 @@ public class WmsOutboundPage implements Serializable {
     @Schema(description = "物流单号")
     private String logisticsNumber;
 
+    /** 物流运费(元) */
+    @Schema(description = "物流运费(元)")
+    private Double freightFee;
+
+    /** 发运出库时间 */
+    @JsonFormat(timezone = "GMT+8", pattern = "yyyy-MM-dd HH:mm:ss")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @Schema(description = "发运出库时间")
+    private Date shipTime;
+
+    /** 发货确认人账号 */
+    @Schema(description = "发货确认人账号")
+    private String shipBy;
+
     /** 明细行数 */
     @Schema(description = "明细行数")
     private Integer detailRows;

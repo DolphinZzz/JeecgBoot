@@ -13,6 +13,8 @@ import org.jeecg.modules.wms.enums.WmsEntryStatusEnum;
 import org.jeecg.modules.wms.enums.WmsOverReceiveStatusEnum;
 import org.jeecg.modules.wms.enums.WmsQcStatusEnum;
 import org.jeecg.modules.wms.vo.WmsWarehousingEntryResultVo;
+import org.jeecg.modules.wms.vo.WmsEntryQuery;
+import java.util.List;
 import org.jeecg.modules.wms.mapper.WmsInventoryMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSkuMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSnMapper;
@@ -485,7 +487,7 @@ public class WmsWarehousingEntryServiceImplTest {
                         .setQcPassCount(12).setQcFailCount(0)));
         when(entryUpMapper.selectList(any())).thenReturn(Collections.emptyList());
         when(putawayService.recommend(any())).thenReturn(new org.jeecg.modules.wms.vo.WmsPutawayPlan()
-                .setStrategyUsed("ABC").setZoneType("GENERAL").setNeedCount(12).setRemainCount(0)
+                .setStrategyUsed("ABC").setNeedCount(12).setRemainCount(0)
                 .addLine(new org.jeecg.modules.wms.vo.WmsPutawayPlanLine()
                         .setLocaId(6).setLocaCode("L-06").setCount(12).setCapacity(416)));
 
@@ -511,8 +513,8 @@ public class WmsWarehousingEntryServiceImplTest {
                         .setQcPassCount(1).setQcFailCount(0)));
         when(entryUpMapper.selectList(any())).thenReturn(Collections.emptyList());
         when(putawayService.recommend(any())).thenReturn(new org.jeecg.modules.wms.vo.WmsPutawayPlan()
-                .setStrategyUsed("ABC").setZoneType("VALUABLE").setNeedCount(1).setRemainCount(1)
-                .setEmptyReason("商品分区为 贵品，本仓 13 个库位均不满足，主要原因：分区不匹配"));
+                .setStrategyUsed("ABC").setNeedCount(1).setRemainCount(1)
+                .setEmptyReason("本仓 13 个库位均不满足，主要原因：库位状态异常"));
 
         org.jeecg.modules.wms.vo.WmsPutawayPlan plan = entryService.recommendPutaway(ENTRY_ID);
 
@@ -522,10 +524,10 @@ public class WmsWarehousingEntryServiceImplTest {
         assertNull(line.getLocaId(), "占位行不带库位，必须由作业员自己选");
         assertEquals(1, line.getCount());
         assertEquals(1L, line.getDetailId());
-        assertEquals("商品分区为 贵品，本仓 13 个库位均不满足，主要原因：分区不匹配", plan.getEmptyReason());
+        assertEquals("本仓 13 个库位均不满足，主要原因：库位状态异常", plan.getEmptyReason());
     }
 
-    /** 强制指定库位但没填原因：必须拦住，审计要能解释为什么绕过了分区/温区 */
+    /** 强制指定库位但没填原因：必须拦住，审计要能解释为什么绕过了温区等条件 */
     @Test
     void forcedPutawayRequiresReason() {
         entry.setStatus(WmsEntryStatusEnum.PENDING_PUTAWAY.getCode());
@@ -535,7 +537,7 @@ public class WmsWarehousingEntryServiceImplTest {
                         .setQcStatus(WmsQcStatusEnum.PASS.getCode())
                         .setQcPassCount(1).setQcFailCount(0)));
         when(putawayService.recommend(any())).thenReturn(new org.jeecg.modules.wms.vo.WmsPutawayPlan()
-                .setStrategyUsed("ABC").setZoneType("VALUABLE").setNeedCount(1).setRemainCount(1));
+                .setStrategyUsed("ABC").setNeedCount(1).setRemainCount(1));
 
         org.jeecg.modules.wms.vo.WmsPutawayConfirmForm form = new org.jeecg.modules.wms.vo.WmsPutawayConfirmForm();
         form.setId(ENTRY_ID);
@@ -892,12 +894,28 @@ public class WmsWarehousingEntryServiceImplTest {
                 new org.jeecg.modules.wms.entity.WmsWarehousingEntryUp()
                         .setEntryDetailsId(1L).setCount(1).setQualityStatus(3).setStatus(2)));
         when(putawayService.recommend(any())).thenReturn(new org.jeecg.modules.wms.vo.WmsPutawayPlan()
-                .setStrategyUsed("ABC").setZoneType("GENERAL").setNeedCount(1).setRemainCount(1));
+                .setStrategyUsed("ABC").setNeedCount(1).setRemainCount(1));
 
         org.jeecg.modules.wms.vo.WmsPutawayPlan plan = entryService.recommendPutaway(ENTRY_ID);
 
         // 唯一一件良品还没上架，仍应给出上架推荐，而不是被破损留痕当成已上架而跳过
         assertEquals(1, plan.getLines().size());
         assertEquals(1, plan.getLines().get(0).getCount());
+    }
+
+    @Test
+    void queryEntryPageSupportsMultiStatus() {
+        WmsEntryQuery query = new WmsEntryQuery();
+        query.setStatus("40,50");
+        List<Integer> list = query.getStatusList();
+        assertNotNull(list);
+        assertEquals(2, list.size());
+        assertEquals(40, list.get(0));
+        assertEquals(50, list.get(1));
+
+        when(entryMapper.selectEntryPage(any(), eq(query))).thenReturn(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>());
+        com.baomidou.mybatisplus.core.metadata.IPage<org.jeecg.modules.wms.vo.WmsEntryPage> res = entryService.queryEntryPage(query, 1, 10);
+        assertNotNull(res);
+        verify(entryMapper).selectEntryPage(any(), eq(query));
     }
 }

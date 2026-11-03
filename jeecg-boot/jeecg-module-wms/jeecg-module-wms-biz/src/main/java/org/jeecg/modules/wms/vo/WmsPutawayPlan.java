@@ -22,9 +22,6 @@ public class WmsPutawayPlan {
     /**本次使用的排序策略(FIXED / ABC / NEAREST)*/
     private String strategyUsed;
 
-    /**商品推导出的分区类型(GENERAL / SMALL / LARGE / VALUABLE)*/
-    private String zoneType;
-
     /**待上架数量*/
     private int needCount;
 

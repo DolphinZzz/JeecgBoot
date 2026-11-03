@@ -25,6 +25,15 @@ public class WmsOutboundDetailForm implements Serializable {
     @Schema(description = "规格ID", requiredMode = Schema.RequiredMode.REQUIRED)
     private Long skuId;
 
+    /** 出库库位ID */
+    @NotNull(message = "出库库位不能为空")
+    @Schema(description = "出库库位ID", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Integer warehouseAreaLocaId;
+
+    /** 库区ID */
+    @Schema(description = "出库库区ID")
+    private Integer warehouseAreaId;
+
     /** 计划出库数量 */
     @NotNull(message = "计划出库数量不能为空")
     @Min(value = 1, message = "计划出库数量必须大于 0")

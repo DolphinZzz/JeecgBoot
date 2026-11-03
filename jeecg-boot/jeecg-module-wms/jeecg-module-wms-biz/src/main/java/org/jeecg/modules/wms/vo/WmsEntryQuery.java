@@ -2,6 +2,10 @@ package org.jeecg.modules.wms.vo;
 
 import lombok.Data;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * @Description: 入库单查询条件
  * @Author: jeecg-boot
@@ -32,9 +36,27 @@ public class WmsEntryQuery {
     /**上游ERP采购单号（模糊）*/
     private String erpPoNo;
 
-    /**入库单状态(10待到货 20收货清点中 30待质检 40质检完成待上架 50上架中 60已完成 90异常挂起 99已取消)*/
-    private Integer status;
+    /**入库单状态(支持单状态如 10，或逗号分隔的多状态如 40,50)*/
+    private String status;
 
     /**是否只看未完成的单据（status 非 60/99），默认 false 看全部*/
     private Boolean onlyOpen;
+
+    /**
+     * 解析 status 为整数列表，兼容单状态与逗号分隔的多状态
+     */
+    public List<Integer> getStatusList() {
+        if (status == null || status.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return Arrays.stream(status.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(Integer::valueOf)
+                    .collect(Collectors.toList());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
 }

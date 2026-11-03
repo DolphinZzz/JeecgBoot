@@ -11,7 +11,6 @@ import org.jeecg.modules.wms.entity.WmsWarehouse;
 import org.jeecg.modules.wms.entity.WmsWarehouseArea;
 import org.jeecg.modules.wms.entity.WmsWarehouseAreaLoca;
 import org.jeecg.modules.wms.enums.WmsPutawayStrategyEnum;
-import org.jeecg.modules.wms.enums.WmsZoneTypeEnum;
 import org.jeecg.modules.wms.mapper.WmsInventoryMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSkuMapper;
 import org.jeecg.modules.wms.mapper.WmsItemSpuMapper;
@@ -31,8 +30,11 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -103,22 +105,18 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
         WmsItemSpu spu = sku.getSpuId() == null ? null : spuMapper.selectById(sku.getSpuId());
         int warehouseId = request.getWarehouseId();
 
-        // 商品分区推导：贵品 → 大件 → 小件 → 通用
-        WmsZoneTypeEnum itemZone = deriveItemZone(sku, spu, warehouseId);
-
         // 第 1 层：硬过滤出候选库位（顺带统计被淘汰的原因，供页面说明「为什么放不下」）
         LinkedHashMap<String, Integer> rejected = new LinkedHashMap<>();
-        List<WmsPutawayCandidate> candidates = filterCandidates(request, sku, spu, itemZone, rejected);
+        List<WmsPutawayCandidate> candidates = filterCandidates(request, sku, spu, rejected);
         if (candidates.isEmpty()) {
             WmsPutawayPlan empty = new WmsPutawayPlan()
                     .setStrategyUsed(resolveStrategy(sku, warehouseId).getCode())
-                    .setZoneType(itemZone.getCode())
                     .setNeedCount(request.getCount())
                     .setRemainCount(request.getCount())
                     .setRejectedCount(rejected.values().stream().mapToInt(Integer::intValue).sum())
-                    .setEmptyReason(summarizeRejected(rejected, itemZone));
-            log.info("SKU {} 在仓库 {} 无可用上架库位（分区 {}，原因 {}）",
-                    request.getSkuId(), warehouseId, itemZone.getCode(), empty.getEmptyReason());
+                    .setEmptyReason(summarizeRejected(rejected));
+            log.info("SKU {} 在仓库 {} 无可用上架库位（原因 {}）",
+                    request.getSkuId(), warehouseId, empty.getEmptyReason());
             return empty;
         }
 
@@ -126,7 +124,6 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
         WmsPutawayStrategyEnum strategy = resolveStrategy(sku, warehouseId);
         WmsPutawayPlan plan = new WmsPutawayPlan()
                 .setStrategyUsed(strategy.getCode())
-                .setZoneType(itemZone.getCode())
                 .setNeedCount(request.getCount());
         int remain = request.getCount();
         if (strategy == WmsPutawayStrategyEnum.FIXED) {
@@ -155,9 +152,8 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
         if (loca == null) {
             throw new JeecgBootException("目标库位不存在");
         }
-        WmsZoneTypeEnum itemZone = deriveItemZone(sku, spu, request.getWarehouseId());
         // 单库位校验：逐个断言，抛出的原因就是页面上看到的原因
-        assertLocaAllowed(request, sku, spu, itemZone, loca,
+        assertLocaAllowed(request, sku, spu, loca,
                 loadArea(loca.getWarehouseAreaId()), loadOccupied(locaId), request.getCount());
         return loca;
     }
@@ -173,23 +169,31 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
      * 天然不是上架落点，扫进来只是浪费查询（方案 3.5.4 也写明这些区不参与）。
      */
     private List<WmsPutawayCandidate> filterCandidates(WmsPutawayRequest request, WmsItemSku sku,
-                                                       WmsItemSpu spu, WmsZoneTypeEnum itemZone,
+                                                       WmsItemSpu spu,
                                                        LinkedHashMap<String, Integer> rejected) {
+        int quality = request.getQualityStatus() == null ? QUALITY_GOOD : request.getQualityStatus();
+        List<String> targetCategories = quality == QUALITY_GOOD
+                ? Arrays.asList(AREA_STORAGE, AREA_PICKING)
+                : Collections.singletonList(AREA_RETURN);
+
         List<WmsWarehouseArea> areas = areaMapper.selectList(new LambdaQueryWrapper<WmsWarehouseArea>()
                 .eq(WmsWarehouseArea::getWarehouseId, request.getWarehouseId())
-                .in(WmsWarehouseArea::getCategory, AREA_STORAGE, AREA_PICKING, AREA_RETURN));
+                .in(WmsWarehouseArea::getCategory, targetCategories));
         if (areas.isEmpty()) {
-            rejected.merge("本仓没有存储区/拣货区/退货不良区，需要先建库区", 1, Integer::sum);
+            rejected.merge(quality == QUALITY_GOOD ? "本仓没有存储区/拣货区，需要先建库区" : "本仓没有退货不良区，需要先建库区", 1, Integer::sum);
             return new ArrayList<>();
         }
         Map<Integer, WmsWarehouseArea> areaMap = areas.stream()
                 .collect(Collectors.toMap(WmsWarehouseArea::getId, a -> a, (a, b) -> a));
+
         List<WmsWarehouseAreaLoca> locas = locaMapper.selectList(new LambdaQueryWrapper<WmsWarehouseAreaLoca>()
                 .eq(WmsWarehouseAreaLoca::getWarehouseId, request.getWarehouseId())
                 .in(WmsWarehouseAreaLoca::getWarehouseAreaId, areaMap.keySet())
+                .notIn(WmsWarehouseAreaLoca::getLocaStatus, LOCA_STATUS_STOCKTAKING, LOCA_STATUS_DISABLED)
+                .and(w -> w.isNull(WmsWarehouseAreaLoca::getFixedSkuId).or().eq(WmsWarehouseAreaLoca::getFixedSkuId, request.getSkuId()))
                 .orderByAsc(WmsWarehouseAreaLoca::getLocaCode));
         if (locas.isEmpty()) {
-            rejected.merge("本仓的存储区/拣货区/退货不良区下还没有库位，需要先建库位", 1, Integer::sum);
+            rejected.merge("本仓没有可用的空闲或专属绑定库位", 1, Integer::sum);
             return new ArrayList<>();
         }
 
@@ -209,7 +213,7 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
                 // 候选枚举阶段只要求「至少放得下 1 件」：本批数量由第 3 层按 cap_i 拆分，
                 // 这里按整批校验会把所有放不满整批的库位都筛掉，永远拆不起来。
                 // 人工指定库位（checkTargetLoca）才按整批校验，因为那是明确的一次落库。
-                assertLocaAllowed(request, sku, spu, itemZone, loca, area, occupied, 1);
+                assertLocaAllowed(request, sku, spu, loca, area, occupied, 1);
             } catch (JeecgBootException e) {
                 // 硬过滤阶段被排除是正常结果，不是错误，记 debug 便于排查「为什么没推荐这个库位」
                 log.debug("库位 {} 被硬过滤：{}", loca.getLocaCode(), e.getMessage());
@@ -234,7 +238,7 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
      * 抛出的异常消息就是页面上展示的拒绝原因。
      */
     private void assertLocaAllowed(WmsPutawayRequest request, WmsItemSku sku, WmsItemSpu spu,
-                                   WmsZoneTypeEnum itemZone, WmsWarehouseAreaLoca loca,
+                                   WmsWarehouseAreaLoca loca,
                                    WmsWarehouseArea area, List<WmsInventory> occupied, int count) {
         if (loca == null) {
             throw new JeecgBootException("目标库位不存在");
@@ -273,38 +277,25 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
                     "库位[%s]存储条件为 %s，与商品要求的 %s 不匹配", locaCode, locaCondition, required));
         }
 
-        // ④ 分区匹配（含兜底）
-        WmsZoneTypeEnum areaZone = WmsZoneTypeEnum.of(area == null ? null : area.getZoneType());
-        if (!matchesZone(itemZone, areaZone)) {
-            throw new JeecgBootException(String.format(
-                    "库位[%s]所在库区分区为 %s，与商品分区 %s 不匹配",
-                    locaCode, areaZone.getDesc(), itemZone.getDesc()));
-        }
-
-        // ⑤ 固定库位只放绑定的 SKU（fixed_loca_lend_when_empty = 0 时，空着也不借）
-        boolean lendWhenEmpty = Boolean.TRUE.equals(strategyConfigService.getBooleanConfig(
-                request.getWarehouseId(), "fixed_loca_lend_when_empty", false));
+        // ④ 固定库位只放绑定的 SKU
         if (loca.getFixedSkuId() != null && !loca.getFixedSkuId().equals(request.getSkuId())) {
-            boolean empty = occupied.stream().noneMatch(row -> countOf(row.getTotalCount()) > 0);
-            if (!(lendWhenEmpty && empty)) {
-                throw new JeecgBootException("库位[" + locaCode + "]是固定库位，只能存放绑定的SKU");
-            }
+            throw new JeecgBootException("库位[" + locaCode + "]是固定库位，只能存放绑定的SKU");
         }
 
-        // ⑥ 混放规则
+        // ⑤ 混放规则：一库位一 SKU 一批次（RETURN 库区允许混放）
         String batch = request.getBatchNumber() == null ? "" : request.getBatchNumber();
-        for (WmsInventory row : occupied) {
-            if (countOf(row.getTotalCount()) <= 0) {
-                continue;
-            }
-            if (row.getSkuId() != null && !row.getSkuId().equals(request.getSkuId())
-                    && (loca.getAllowMixSku() == null || loca.getAllowMixSku() != 1)) {
-                throw new JeecgBootException("库位[" + locaCode + "]不允许混放SKU");
-            }
-            String rowBatch = row.getBatchNumber() == null ? "" : row.getBatchNumber();
-            if (!rowBatch.equals(batch)
-                    && (loca.getAllowMixBatch() == null || loca.getAllowMixBatch() != 1)) {
-                throw new JeecgBootException("库位[" + locaCode + "]不允许混放批次");
+        if (!AREA_RETURN.equals(category)) {
+            for (WmsInventory row : occupied) {
+                if (countOf(row.getTotalCount()) <= 0) {
+                    continue;
+                }
+                if (row.getSkuId() != null && !row.getSkuId().equals(request.getSkuId())) {
+                    throw new JeecgBootException("库位[" + locaCode + "]不允许混放SKU");
+                }
+                String rowBatch = row.getBatchNumber() == null ? "" : row.getBatchNumber();
+                if (!rowBatch.equals(batch)) {
+                    throw new JeecgBootException("库位[" + locaCode + "]不允许混放批次");
+                }
             }
         }
 
@@ -346,14 +337,15 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
         int weightCap = unitWeight > 0 && remainWeight < UNLIMITED
                 ? remainWeight / unitWeight : UNLIMITED;
 
+        int finalCapacity = Math.min(volumeCap, weightCap);
+
         return new WmsPutawayCandidate()
                 .setLoca(loca)
-                .setZoneType(area == null ? null : area.getZoneType())
                 .setAreaCategory(area == null ? null : area.getCategory())
                 .setAreaName(area == null ? null : area.getName())
                 .setRemainVolume(remainVolume)
                 .setRemainWeight(remainWeight)
-                .setCapacity(Math.min(volumeCap, weightCap))
+                .setCapacity(finalCapacity)
                 .setSameSku(hasSameSku(occupied, request))
                 .setOverflow(false)
                 .setLocaScore(loca.getLocaScore() == null ? 0D : loca.getLocaScore().doubleValue())
@@ -495,30 +487,6 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
     }
 
     /**
-     * 商品分区推导。阈值全部取自 wms_strategy_config（ZONE 分组），
-     * 单位按 SPU 上的 *_unit 换算到基准单位（mm / g / cm³）。
-     */
-    private WmsZoneTypeEnum deriveItemZone(WmsItemSku sku, WmsItemSpu spu, Integer warehouseId) {
-        double price = sku.getPrice() == null ? 0D : sku.getPrice().doubleValue();
-        double valuablePrice = strategyConfigService.getDoubleConfig(warehouseId, "zone_valuable_price", 5000D);
-        int largeVolume = strategyConfigService.getIntConfig(warehouseId, "zone_large_volume", 125000);
-        int largeWeight = strategyConfigService.getIntConfig(warehouseId, "zone_large_weight", 25000);
-        int largeSide = strategyConfigService.getIntConfig(warehouseId, "zone_large_side", 1200);
-        int smallVolume = strategyConfigService.getIntConfig(warehouseId, "zone_small_volume", 1000);
-
-        int volume = WmsUnitConverter.volumeToCm3(sku.getProductVolume(), spu);
-        int weight = WmsUnitConverter.weightToG(sku.getProductWeight(), spu);
-        int maxSide = Math.max(
-                Math.max(WmsUnitConverter.lengthToMm(sku.getProductLength(), spu),
-                        WmsUnitConverter.lengthToMm(sku.getProductWidth(), spu)),
-                WmsUnitConverter.lengthToMm(sku.getProductHeight(), spu));
-        boolean valuable = spu != null && spu.getIsValuable() != null && spu.getIsValuable() == 1;
-
-        return WmsZoneTypeEnum.derive(valuable, price, valuablePrice,
-                volume, weight, maxSide, largeVolume, largeWeight, largeSide, smallVolume);
-    }
-
-    /**
      * 商品等级：优先取 wms_abc_class_result 的当前生效等级，
      * 其次 SPU 上的兜底等级，都没有按 C（放最不占地方的库位，宁松不紧）。
      */
@@ -562,20 +530,10 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
         }
     }
 
-    /** 分区匹配：商品分区允许的兜底分区里包含库区分区即可（方案 3.5.2 兜底表） */
-    private boolean matchesZone(WmsZoneTypeEnum itemZone, WmsZoneTypeEnum areaZone) {
-        for (WmsZoneTypeEnum allowed : itemZone.fallbacks()) {
-            if (allowed == areaZone) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /** 存储条件以 SPU 为准，未设置按常温 */
     private String resolveStorageCondition(WmsItemSpu spu) {
         if (spu != null && oConvertUtils.isNotEmpty(spu.getStorageCondition())) {
-            return spu.getStorageCondition();
+            return normalizeStorageCondition(spu.getStorageCondition());
         }
         return DEFAULT_STORAGE_CONDITION;
     }
@@ -586,12 +544,24 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
      */
     private String resolveLocaStorageCondition(WmsWarehouseAreaLoca loca, WmsWarehouseArea area) {
         if (oConvertUtils.isNotEmpty(loca.getStorageCondition())) {
-            return loca.getStorageCondition();
+            return normalizeStorageCondition(loca.getStorageCondition());
         }
         if (area != null && oConvertUtils.isNotEmpty(area.getStorageCondition())) {
-            return area.getStorageCondition();
+            return normalizeStorageCondition(area.getStorageCondition());
         }
         return DEFAULT_STORAGE_CONDITION;
+    }
+
+    private String normalizeStorageCondition(String cond) {
+        if (cond == null) return DEFAULT_STORAGE_CONDITION;
+        String trimmed = cond.trim();
+        if ("常温".equals(trimmed) || "NORMAL".equalsIgnoreCase(trimmed)) return "NORMAL";
+        if ("阴凉".equals(trimmed) || "COOL".equalsIgnoreCase(trimmed)) return "COOL";
+        if ("冷藏".equals(trimmed) || "COLD".equalsIgnoreCase(trimmed)) return "COLD";
+        if ("冷冻".equals(trimmed) || "FROZEN".equalsIgnoreCase(trimmed)) return "FROZEN";
+        if ("防静电".equals(trimmed) || "ESD".equalsIgnoreCase(trimmed)) return "ESD";
+        if ("危化".equals(trimmed) || "HAZARD".equalsIgnoreCase(trimmed)) return "HAZARD";
+        return trimmed.toUpperCase();
     }
 
     private int countOf(Integer value) {
@@ -648,6 +618,9 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
         if (loca.getLocaStatus() != null && loca.getLocaStatus() == LOCA_STATUS_STOCKTAKING) {
             throw new JeecgBootException("库位[" + loca.getLocaCode() + "]正在盘点锁定，不能上架");
         }
+        if (loca.getFixedSkuId() != null && !loca.getFixedSkuId().equals(request.getSkuId())) {
+            throw new JeecgBootException("库位[" + loca.getLocaCode() + "]是固定库位，只能存放绑定的SKU");
+        }
         return loca;
     }
 
@@ -661,16 +634,24 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
             throw new JeecgBootException("请指定仓库");
         }
         Integer warehouseId = request.getWarehouseId();
-        // 下拉不按分区/温区过滤（强制指定就是让人越过分区判断），但状态上排除禁用与盘点锁定，
-        // 这两种库位任何情况下都不该被选中，列出来只会让作业员白填一遍原因。
+        WmsItemSku sku = request.getSkuId() == null ? null : skuMapper.selectById(request.getSkuId());
+        WmsItemSpu spu = sku == null || sku.getSpuId() == null ? null : spuMapper.selectById(sku.getSpuId());
+        Long spuId = sku != null ? sku.getSpuId() : null;
+
+        int quality = request.getQualityStatus() == null ? QUALITY_GOOD : request.getQualityStatus();
+        List<String> targetCategories = quality == QUALITY_GOOD
+                ? Arrays.asList(AREA_STORAGE, AREA_PICKING)
+                : Collections.singletonList(AREA_RETURN);
+
         List<WmsWarehouseArea> areas = areaMapper.selectList(new LambdaQueryWrapper<WmsWarehouseArea>()
                 .eq(WmsWarehouseArea::getWarehouseId, warehouseId)
-                .orderByAsc(WmsWarehouseArea::getId));
+                .in(WmsWarehouseArea::getCategory, targetCategories));
         if (areas.isEmpty()) {
             return new ArrayList<>();
         }
         Map<Integer, WmsWarehouseArea> areaMap = areas.stream()
                 .collect(Collectors.toMap(WmsWarehouseArea::getId, a -> a, (a, b) -> a));
+
         List<WmsWarehouseAreaLoca> locas = locaMapper.selectList(new LambdaQueryWrapper<WmsWarehouseAreaLoca>()
                 .eq(WmsWarehouseAreaLoca::getWarehouseId, warehouseId)
                 .in(WmsWarehouseAreaLoca::getWarehouseAreaId, areaMap.keySet())
@@ -681,31 +662,50 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
             return new ArrayList<>();
         }
 
-        WmsItemSku sku = request.getSkuId() == null ? null : skuMapper.selectById(request.getSkuId());
-        WmsItemSpu spu = sku == null || sku.getSpuId() == null ? null : spuMapper.selectById(sku.getSpuId());
-        WmsZoneTypeEnum itemZone = sku == null ? null : deriveItemZone(sku, spu, warehouseId);
         Map<Integer, List<WmsInventory>> occupiedMap = loadOccupiedByLocas(
                 locas.stream().map(WmsWarehouseAreaLoca::getId).collect(Collectors.toList()));
         WmsWarehouse warehouse = warehouseMapper.selectById(warehouseId);
         String warehouseName = warehouse == null ? null : warehouse.getName();
 
+        String spuName = spu != null ? spu.getTitle() : (sku != null ? "商品" + sku.getId() : "");
+        String spuCode = spu != null ? spu.getSubTitle() : "";
+        String skuCode = sku != null ? sku.getCode() : "";
+
         List<WmsPutawayLocaOption> options = new ArrayList<>();
         for (WmsWarehouseAreaLoca loca : locas) {
             WmsWarehouseArea area = areaMap.get(loca.getWarehouseAreaId());
+            List<WmsInventory> occupied = occupiedMap.getOrDefault(loca.getId(), new ArrayList<>());
             String reason = "";
-            if (sku != null) {
-                try {
-                    // 与推荐用同一套断言，只是这里不排除，改为把原因挂在选项上
-                    assertLocaAllowed(request, sku, spu, itemZone, loca, area,
-                            occupiedMap.getOrDefault(loca.getId(), new ArrayList<>()), request.getCount());
-                } catch (JeecgBootException e) {
-                    reason = e.getMessage();
-                }
+            try {
+                assertLocaAllowed(request, sku, spu, loca, area, occupied, request.getCount());
+            } catch (JeecgBootException e) {
+                reason = e.getMessage();
             }
+
             Integer remainVolume = loca.getLocalVolume() == null || loca.getLocalVolume() <= 0
                     ? null : Math.max(0, loca.getLocalVolume() - countOf(loca.getUsedVolume()));
             Integer remainWeight = loca.getLocalBearingCapacity() == null || loca.getLocalBearingCapacity() <= 0
                     ? null : Math.max(0, loca.getLocalBearingCapacity() - countOf(loca.getUsedWeight()));
+
+            int currentTotal = occupied.stream().mapToInt(r -> r.getTotalCount() == null ? 0 : r.getTotalCount()).sum();
+            int currentAvailable = occupied.stream().mapToInt(r -> r.getAvailableCount() == null ? 0 : r.getAvailableCount()).sum();
+            String currentBatch = occupied.stream()
+                    .filter(r -> r.getTotalCount() != null && r.getTotalCount() > 0 && r.getBatchNumber() != null)
+                    .map(WmsInventory::getBatchNumber)
+                    .findFirst().orElse(null);
+
+            Integer physicalCap = remainCount(sku, spu, remainVolume, remainWeight);
+
+            String boundSummary;
+            if (loca.getFixedSkuId() != null) {
+                boundSummary = loca.getFixedSkuId().equals(request.getSkuId())
+                        ? "固定绑定当前规格" : "固定绑定其他规格(不可用)";
+            } else if (currentTotal > 0) {
+                boundSummary = String.format("在库%d件 (批次:%s)", currentTotal, currentBatch != null ? currentBatch : "-");
+            } else {
+                boundSummary = "空闲未绑定";
+            }
+
             options.add(new WmsPutawayLocaOption()
                     .setLocaId(loca.getId())
                     .setLocaCode(loca.getLocaCode())
@@ -716,8 +716,6 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
                     .setAreaName(area == null ? null : area.getName())
                     .setAreaCategory(area == null ? null : area.getCategory())
                     .setAreaCategoryText(areaCategoryText(area == null ? null : area.getCategory()))
-                    .setZoneType(area == null ? null : area.getZoneType())
-                    .setZoneTypeText(WmsZoneTypeEnum.of(area == null ? null : area.getZoneType()).getDesc())
                     .setStorageCondition(resolveLocaStorageCondition(loca, area))
                     .setLocaStatus(loca.getLocaStatus())
                     .setLocaStatusText(locaStatusText(loca.getLocaStatus()))
@@ -732,7 +730,19 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
                     .setPositionNumber(loca.getPositionNumber())
                     .setRemainVolume(remainVolume)
                     .setRemainWeight(remainWeight)
-                    .setRemainCount(remainCount(sku, spu, remainVolume, remainWeight))
+                    .setRemainCount(physicalCap)
+                    .setSpuId(spuId)
+                    .setSpuName(spuName)
+                    .setSpuCode(spuCode)
+                    .setSkuCode(skuCode)
+                    .setBatchNumber(currentBatch)
+                    .setMaxCount(physicalCap)
+                    .setUsedCount(currentTotal)
+                    .setAvailableCount(currentAvailable)
+                    .setUsageRate(null)
+                    .setCapacityStatus(currentTotal == 0 ? "EMPTY" : "OCCUPIED")
+                    .setCapacityStatusText(currentTotal == 0 ? "空闲" : "已占用")
+                    .setBoundSummary(boundSummary)
                     .setFixedSkuId(loca.getFixedSkuId())
                     .setAllowed(reason.isEmpty())
                     .setRejectReason(reason.isEmpty() ? null : reason));
@@ -817,7 +827,7 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
      * 挑出最能说明问题的原因：命中次数最多的那条优先，
      * 前面拼上「本仓 N 个库位均不满足」。同类原因是按条数归并的，第一条就是最常见的。
      */
-    private String summarizeRejected(LinkedHashMap<String, Integer> rejected, WmsZoneTypeEnum itemZone) {
+    private String summarizeRejected(LinkedHashMap<String, Integer> rejected) {
         if (rejected.isEmpty()) {
             return "本仓没有可用于上架的库位";
         }
@@ -826,8 +836,7 @@ public class WmsPutawayServiceImpl implements IWmsPutawayService {
                 .orElse(null);
         int total = rejected.values().stream().mapToInt(Integer::intValue).sum();
         String reason = top == null ? "未知原因" : top.getKey();
-        return String.format("商品分区为 %s，本仓 %d 个库位均不满足，主要原因：%s",
-                itemZone.getDesc(), total, reason);
+        return String.format("本仓 %d 个库位均不满足，主要原因：%s", total, reason);
     }
 
     private void validateRequest(WmsPutawayRequest request) {

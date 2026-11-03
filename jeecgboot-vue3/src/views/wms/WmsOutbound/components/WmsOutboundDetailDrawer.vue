@@ -30,8 +30,13 @@
         <a-descriptions-item label="MES工单号">{{ orderInfo?.mesWorkOrderNo || '-' }}</a-descriptions-item>
         <a-descriptions-item label="物流公司">{{ orderInfo?.logisticsCompanyName || '-' }}</a-descriptions-item>
         <a-descriptions-item label="物流单号">{{ orderInfo?.logisticsNumber || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="创建时间" :span="2">{{ orderInfo?.createTime || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="订单备注" :span="3">{{ orderInfo?.remark || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="物流运费">
+          {{ orderInfo?.freightFee != null ? `¥ ${Number(orderInfo.freightFee).toFixed(2)}` : '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="发货时间">{{ orderInfo?.shipTime || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="发货确认人">{{ orderInfo?.shipBy || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="创建时间">{{ orderInfo?.createTime || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="订单备注" :span="2">{{ orderInfo?.remark || '-' }}</a-descriptions-item>
       </a-descriptions>
 
       <a-tabs default-active-key="1">
@@ -102,6 +107,39 @@
             </template>
           </a-table>
         </a-tab-pane>
+
+        <a-tab-pane key="5" tab="物流发运记录">
+          <a-descriptions bordered size="small" :column="2" style="margin-top: 8px">
+            <a-descriptions-item label="承运商 / 物流公司">
+              <b>{{ orderInfo?.logisticsCompanyName || '-' }}</b>
+            </a-descriptions-item>
+            <a-descriptions-item label="物流运单号">
+              <span style="font-family: monospace; font-weight: bold; color: #1890ff">
+                {{ orderInfo?.logisticsNumber || '-' }}
+              </span>
+            </a-descriptions-item>
+            <a-descriptions-item label="物流运费 (元)">
+              <span style="color: #fa8c16; font-weight: bold">
+                {{ orderInfo?.freightFee != null ? `¥ ${Number(orderInfo.freightFee).toFixed(2)}` : '¥ 0.00' }}
+              </span>
+            </a-descriptions-item>
+            <a-descriptions-item label="发运包裹总毛重">
+              {{ orderInfo?.totalWeight ? `${(orderInfo.totalWeight / 1000).toFixed(2)} kg (${orderInfo.totalWeight} g)` : '-' }}
+            </a-descriptions-item>
+            <a-descriptions-item label="发运出库时间">
+              {{ orderInfo?.shipTime || '-' }}
+            </a-descriptions-item>
+            <a-descriptions-item label="发货确认人">
+              {{ orderInfo?.shipBy || '-' }}
+            </a-descriptions-item>
+            <a-descriptions-item label="发运闭环状态" :span="2">
+              <a-badge
+                :status="orderInfo?.status >= 80 ? 'success' : 'processing'"
+                :text="orderInfo?.status >= 80 ? '已发运出库（实物库存已真实扣减、SN全流程核销完成）' : '待物流发货确认'"
+              />
+            </a-descriptions-item>
+          </a-descriptions>
+        </a-tab-pane>
       </a-tabs>
     </div>
   </BasicDrawer>
@@ -110,7 +148,7 @@
 <script lang="ts" setup>
   import { ref } from 'vue';
   import { BasicDrawer, useDrawerInner } from '/@/components/Drawer';
-  import { queryById } from '../WmsOutbound.api';
+  import { queryById, queryDetails, queryPackages, queryWeights, querySns } from '../WmsOutbound.api';
   import { statusColorMap, statusTextMap, outboundTypeMap } from '../WmsOutbound.data';
 
   const loading = ref(false);
@@ -133,22 +171,31 @@
 
   const packageColumns = [
     { title: '箱号', dataIndex: 'packageCode', width: 180 },
-    { title: '包装类型', dataIndex: 'packageType', width: 120, align: 'center' },
-    { title: '创建时间', dataIndex: 'createTime', width: 160, align: 'center' },
+    { title: '包装类型', dataIndex: 'packageType', width: 100, align: 'center' },
+    { title: '商品编码', dataIndex: 'skuCode', width: 130 },
+    { title: '商品名称', dataIndex: 'skuName', width: 180 },
+    { title: '装箱件数', dataIndex: 'packageCount', width: 90, align: 'center' },
+    { title: '打包时间', dataIndex: 'packageTime', width: 160, align: 'center' },
+    { title: '操作人', dataIndex: 'createBy', width: 100, align: 'center' },
   ];
 
   const weightColumns = [
-    { title: '箱号', dataIndex: 'packageCode', width: 180 },
-    { title: '实测重量 (kg)', dataIndex: 'actualWeight', width: 120, align: 'center' },
-    { title: '理论重量 (kg)', dataIndex: 'theoreticalWeight', width: 120, align: 'center' },
+    { title: '称重单号', dataIndex: 'weightsCode', width: 160 },
+    { title: '关联箱号', dataIndex: 'packageCode', width: 180 },
+    { title: '包装类型', dataIndex: 'packageType', width: 100, align: 'center' },
+    { title: '装箱件数', dataIndex: 'packageCount', width: 90, align: 'center' },
+    { title: '实测毛重 (kg)', dataIndex: 'actualWeight', width: 120, align: 'center' },
+    { title: '理论毛重 (kg)', dataIndex: 'theoreticalWeight', width: 120, align: 'center' },
     { title: '重量偏差', key: 'diffWeight', width: 120, align: 'center' },
-    { title: '称重时间', dataIndex: 'createTime', width: 160, align: 'center' },
+    { title: '称重时间', dataIndex: 'weightsTime', width: 160, align: 'center' },
+    { title: '称重人', dataIndex: 'createBy', width: 100, align: 'center' },
   ];
 
   const snColumns = [
     { title: 'SN序列号', dataIndex: 'snCode', width: 200 },
-    { title: '商品SKU', dataIndex: 'skuId', width: 120, align: 'center' },
-    { title: '状态', key: 'status', width: 120, align: 'center' },
+    { title: '商品编码', dataIndex: 'skuCode', width: 130 },
+    { title: '商品名称', dataIndex: 'skuName', width: 180 },
+    { title: '当前状态', key: 'status', width: 120, align: 'center' },
     { title: '更新时间', dataIndex: 'updateTime', width: 160, align: 'center' },
   ];
 
@@ -167,12 +214,20 @@
   async function loadDetail(id: number | string) {
     loading.value = true;
     try {
-      const res = await queryById(id);
-      orderInfo.value = res?.outboundOrder || {};
-      detailList.value = res?.details || [];
-      packageList.value = res?.packages || [];
-      weightList.value = res?.weights || [];
-      snList.value = res?.snList || [];
+      const [orderRes, detailsRes, packagesRes, weightsRes, snsRes]: any = await Promise.all([
+        queryById(id),
+        queryDetails(id),
+        queryPackages(id),
+        queryWeights(id),
+        querySns(id),
+      ]);
+      orderInfo.value = orderRes || {};
+      detailList.value = detailsRes || [];
+      packageList.value = packagesRes || [];
+      weightList.value = weightsRes || [];
+      snList.value = snsRes || [];
+    } catch (e) {
+      console.error('加载出库详情失败', e);
     } finally {
       loading.value = false;
     }

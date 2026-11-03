@@ -8,6 +8,10 @@ import org.jeecg.modules.wms.entity.WmsInventory;
 import org.jeecg.modules.wms.vo.WmsInventoryDimension;
 import org.jeecg.modules.wms.vo.WmsInventoryPage;
 import org.jeecg.modules.wms.vo.WmsInventoryQuery;
+import org.jeecg.modules.wms.vo.WmsInventoryLocaPageVO;
+import org.jeecg.modules.wms.vo.WmsInventoryLocaQuery;
+import org.jeecg.modules.wms.vo.WmsInventoryLedgerVO;
+import org.jeecg.modules.wms.vo.WmsInventoryLedgerQuery;
 
 /**
  * @Description: 多维实时库存
@@ -22,6 +26,16 @@ public interface WmsInventoryMapper extends BaseMapper<WmsInventory> {
      * 避免逐行走表字典翻译。
      */
     IPage<WmsInventoryPage> selectInventoryPage(Page<WmsInventoryPage> page, @Param("q") WmsInventoryQuery query);
+
+    /**
+     * 库存管理 - Tab 1: 库位列表分页查询
+     */
+    IPage<WmsInventoryLocaPageVO> selectLocaPage(Page<WmsInventoryLocaPageVO> page, @Param("q") WmsInventoryLocaQuery query);
+
+    /**
+     * 库存管理 - Tab 2: 全周期库存台账分页查询
+     */
+    IPage<WmsInventoryLedgerVO> selectLedgerPage(Page<WmsInventoryLedgerVO> page, @Param("q") WmsInventoryLedgerQuery query);
 
     /**
      * 同一仓库（可限定 SKU）下所有库存行的 total_count 之和，用于流水与库存对账。

@@ -18,9 +18,13 @@ public class WmsOperationForm {
     @Schema(description = "作业子类(1移库移位 2补货)")
     private Integer operationType;
 
-    /**仓库ID*/
-    @Schema(description = "仓库ID")
+    /**源仓库ID（调出仓库）*/
+    @Schema(description = "源仓库ID（调出仓库）")
     private Integer warehouseId;
+
+    /**目标仓库ID（调入仓库，跨仓移库时指定，同仓移库可留空默认与源仓库相同）*/
+    @Schema(description = "目标仓库ID（调入仓库）")
+    private Integer targetWarehouseId;
 
     /**备注*/
     @Schema(description = "备注")

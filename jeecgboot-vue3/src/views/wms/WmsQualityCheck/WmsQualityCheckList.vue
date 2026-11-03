@@ -16,20 +16,45 @@
 </template>
 
 <script lang="ts" name="wms-wmsQualityCheck" setup>
-  import { reactive } from 'vue';
+  import { onMounted, reactive, watch } from 'vue';
+  import { useRoute } from 'vue-router';
   import { BasicTable, TableAction } from '/@/components/Table';
   import { useModal } from '/@/components/Modal';
   import { useListPage } from '/@/hooks/system/useListPage';
+  import { useMessage } from '/@/hooks/web/useMessage';
   import WmsQualityCheckSubmitModal from './components/WmsQualityCheckSubmitModal.vue';
   import WmsQualityCheckReturnModal from './components/WmsQualityCheckReturnModal.vue';
   import WmsQualityCheckShipModal from './components/WmsQualityCheckShipModal.vue';
   import { columns, searchFormSchema, isDecided } from './WmsQualityCheck.data';
   import { list } from './WmsQualityCheck.api';
 
+  const route = useRoute();
+  const { createMessage } = useMessage();
   const queryParam = reactive<any>({});
   const [registerSubmitModal, { openModal: openSubmitModal }] = useModal();
   const [registerReturnModal, { openModal: openReturnModal }] = useModal();
   const [registerShipModal, { openModal: openShipModal }] = useModal();
+
+  function applyEntryFilter(code: string) {
+    queryParam.entryCode = code;
+    createMessage.info(`已自动定位入库单 [${code}] 的质检记录`);
+    reload();
+  }
+
+  onMounted(() => {
+    if (route.query?.entryCode) {
+      applyEntryFilter(String(route.query.entryCode));
+    }
+  });
+
+  watch(
+    () => route.query?.entryCode,
+    (code) => {
+      if (code && route.path.includes('wmsQualityCheckList')) {
+        applyEntryFilter(String(code));
+      }
+    }
+  );
 
   const { tableContext } = useListPage({
     tableProps: {

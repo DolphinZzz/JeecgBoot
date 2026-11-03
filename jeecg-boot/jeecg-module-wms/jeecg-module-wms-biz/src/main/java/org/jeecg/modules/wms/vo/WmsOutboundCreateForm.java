@@ -30,9 +30,8 @@ public class WmsOutboundCreateForm implements Serializable {
     @Schema(description = "仓库ID", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer warehouseId;
 
-    /** 货主ID */
-    @NotNull(message = "货主不能为空")
-    @Schema(description = "货主ID", requiredMode = Schema.RequiredMode.REQUIRED)
+    /** 货主ID（可选，由明细所选库存自动带出） */
+    @Schema(description = "货主ID（可选，由明细所选库存自动带出）")
     private Long consignorId;
 
     /** 客户ID（销售出库必填） */

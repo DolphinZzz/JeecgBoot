@@ -36,6 +36,9 @@ public class WmsWarehouseCascadeGuardTest {
     @Mock
     private WmsWarehouseAreaLocaMapper warehouseAreaLocaMapper;
 
+    @Mock
+    private org.jeecg.modules.wms.mapper.WmsInventoryMapper inventoryMapper;
+
     @InjectMocks
     private WmsWarehouseServiceImpl warehouseService;
 
@@ -48,6 +51,7 @@ public class WmsWarehouseCascadeGuardTest {
         ReflectionTestUtils.setField(warehouseService, "warehouseAreaMapper", warehouseAreaMapper);
         ReflectionTestUtils.setField(warehouseAreaService, "baseMapper", warehouseAreaMapper);
         ReflectionTestUtils.setField(warehouseAreaService, "warehouseAreaLocaMapper", warehouseAreaLocaMapper);
+        ReflectionTestUtils.setField(warehouseAreaService, "inventoryMapper", inventoryMapper);
     }
 
     @Test
@@ -96,11 +100,11 @@ public class WmsWarehouseCascadeGuardTest {
 
     @Test
     void moveAreaToAnotherWarehouseShouldSyncLocaWarehouseId() {
-        WmsWarehouseArea old = new WmsWarehouseArea().setId(10).setWarehouseId(1).setCategory("STORAGE").setZoneType("GENERAL").setName("库区A");
+        WmsWarehouseArea old = new WmsWarehouseArea().setId(10).setWarehouseId(1).setCategory("STORAGE").setName("库区A");
         when(warehouseAreaMapper.selectById(10)).thenReturn(old);
         when(warehouseAreaMapper.updateById(any(WmsWarehouseArea.class))).thenReturn(1);
 
-        WmsWarehouseArea update = new WmsWarehouseArea().setId(10).setWarehouseId(2).setName("库区A").setCategory("STORAGE").setZoneType("GENERAL");
+        WmsWarehouseArea update = new WmsWarehouseArea().setId(10).setWarehouseId(2).setName("库区A").setCategory("STORAGE");
         assertTrue(warehouseAreaService.updateById(update));
 
         verify(warehouseAreaLocaMapper).update(isNull(), any());
@@ -129,7 +133,6 @@ public class WmsWarehouseCascadeGuardTest {
 
         assertEquals("新库区", entity.getName());
         assertEquals("STORAGE", entity.getCategory());
-        assertEquals("GENERAL", entity.getZoneType());
         assertNull(entity.getId());
         assertEquals(1, entity.getIsDel());
     }

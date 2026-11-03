@@ -143,6 +143,20 @@ export const columns: BasicColumn[] = [
     customRender: ({ text }) => text || '-',
   },
   {
+    title: '运费(元)',
+    align: 'center',
+    dataIndex: 'freightFee',
+    width: 100,
+    customRender: ({ text }) => (text != null ? `¥${Number(text).toFixed(2)}` : '-'),
+  },
+  {
+    title: '发运时间',
+    align: 'center',
+    dataIndex: 'shipTime',
+    width: 160,
+    customRender: ({ text }) => text || '-',
+  },
+  {
     title: '订单日期',
     align: 'center',
     dataIndex: 'orderDate',

@@ -61,7 +61,7 @@
   import { ref } from 'vue';
   import { BasicModal, useModalInner } from '/@/components/Modal';
   import { useMessage } from '/@/hooks/web/useMessage';
-  import { queryById, confirmPick } from '../WmsOutbound.api';
+  import { queryById, queryDetails, confirmPick } from '../WmsOutbound.api';
 
   const { createMessage } = useMessage();
   const emit = defineEmits(['register', 'success']);
@@ -89,11 +89,12 @@
   async function loadDetail(id: number | string) {
     loading.value = true;
     try {
-      const res = await queryById(id);
-      orderInfo.value = res?.outboundOrder || {};
-      const rawDetails = res?.details || [];
+      const [orderRes, detailsRes]: any = await Promise.all([queryById(id), queryDetails(id)]);
+      orderInfo.value = orderRes || {};
+      const rawDetails = detailsRes || [];
       pickLines.value = rawDetails.map((d: any) => ({
         ...d,
+        skuName: `${d.skuCode || d.skuId || '-'} ${d.spuTitle || ''}`.trim(),
         pickedCount: d.pickedCount && d.pickedCount > 0 ? d.pickedCount : d.allocatedCount || 1,
         snInput: '',
         parsedSnList: [] as string[],

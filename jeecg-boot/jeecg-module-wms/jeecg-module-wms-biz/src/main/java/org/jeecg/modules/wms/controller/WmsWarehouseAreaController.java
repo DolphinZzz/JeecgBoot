@@ -47,6 +47,7 @@ public class WmsWarehouseAreaController extends JeecgController<WmsWarehouseArea
         QueryWrapper<WmsWarehouseArea> queryWrapper = QueryGenerator.initQueryWrapper(wmsWarehouseArea, req.getParameterMap());
         Page<WmsWarehouseArea> page = new Page<>(pageNo, pageSize);
         IPage<WmsWarehouseArea> pageList = wmsWarehouseAreaService.page(page, queryWrapper);
+        wmsWarehouseAreaService.fillAreaStatistics(pageList.getRecords());
         return Result.OK(pageList);
     }
 

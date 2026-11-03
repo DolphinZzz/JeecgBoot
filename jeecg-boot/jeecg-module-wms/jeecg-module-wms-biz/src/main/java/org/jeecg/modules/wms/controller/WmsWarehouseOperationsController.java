@@ -1,6 +1,7 @@
 package org.jeecg.modules.wms.controller;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,6 +18,8 @@ import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.jeecg.modules.wms.entity.WmsWarehouseOperations;
 import org.jeecg.modules.wms.entity.WmsWarehouseOperationsDetails;
 import org.jeecg.modules.wms.service.IWmsWarehouseOperationsService;
+import org.jeecg.modules.wms.vo.WmsAreaMigrationForm;
+import org.jeecg.modules.wms.vo.WmsAreaMigrationPreviewVO;
 import org.jeecg.modules.wms.vo.WmsOperationForm;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -94,9 +97,14 @@ public class WmsWarehouseOperationsController {
      */
     @Operation(summary = "库内作业-作业单明细")
     @GetMapping(value = "/queryDetails")
-    public Result<IPage<WmsWarehouseOperationsDetails>> queryDetails(@RequestParam(name = "id", required = true) Long id) {
+    public Result<IPage<WmsWarehouseOperationsDetails>> queryDetails(@RequestParam(name = "id", required = false) Long id) {
+        if (id == null) {
+            Page<WmsWarehouseOperationsDetails> emptyPage = new Page<>(1, 10, 0);
+            emptyPage.setRecords(Collections.emptyList());
+            return Result.OK(emptyPage);
+        }
         List<WmsWarehouseOperationsDetails> details = wmsWarehouseOperationsService.listDetails(id);
-        Page<WmsWarehouseOperationsDetails> page = new Page<>(1, details.size() == 0 ? 1 : details.size(), details.size());
+        Page<WmsWarehouseOperationsDetails> page = new Page<>(1, details.isEmpty() ? 1 : details.size(), details.size());
         page.setRecords(details);
         return Result.OK(page);
     }
@@ -131,5 +139,32 @@ public class WmsWarehouseOperationsController {
         }
         operation.setDetailsList(wmsWarehouseOperationsService.listDetails(id));
         return Result.OK(operation);
+    }
+
+    /**
+     * 整库区迁移预检与智能空库位配对
+     */
+    @AutoLog(value = "库内作业-整库区迁移预检")
+    @Operation(summary = "库内作业-整库区迁移预检")
+    @GetMapping(value = "/previewAreaMigration")
+    public Result<WmsAreaMigrationPreviewVO> previewAreaMigration(@RequestParam(name = "sourceWarehouseId") Integer sourceWarehouseId,
+                                                                   @RequestParam(name = "sourceWarehouseAreaId") Integer sourceWarehouseAreaId,
+                                                                   @RequestParam(name = "targetWarehouseId") Integer targetWarehouseId,
+                                                                   @RequestParam(name = "targetWarehouseAreaId") Integer targetWarehouseAreaId) {
+        WmsAreaMigrationPreviewVO preview = wmsWarehouseOperationsService.previewAreaMigration(
+                sourceWarehouseId, sourceWarehouseAreaId, targetWarehouseId, targetWarehouseAreaId);
+        return Result.OK(preview);
+    }
+
+    /**
+     * 执行整库区批量迁移
+     */
+    @AutoLog(value = "库内作业-执行整库区迁移")
+    @Operation(summary = "库内作业-执行整库区迁移")
+    @RequiresPermissions("wms:wms_warehouse_operations:add")
+    @PostMapping(value = "/executeAreaMigration")
+    public Result<Map<String, Object>> executeAreaMigration(@RequestBody WmsAreaMigrationForm form) {
+        Map<String, Object> result = wmsWarehouseOperationsService.executeAreaMigration(form);
+        return Result.OK((String) result.getOrDefault("message", "整库区迁移执行成功"), result);
     }
 }

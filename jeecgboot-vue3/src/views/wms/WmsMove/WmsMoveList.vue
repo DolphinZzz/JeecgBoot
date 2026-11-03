@@ -3,9 +3,12 @@
     <BasicTable @register="registerTable">
       <template #tableTitle>
         <a-button type="primary" v-auth="'wms:wms_warehouse_operations:add'" preIcon="ant-design:plus-outlined" @click="handleAdd">
-          新建移库单</a-button
-        >
-        <span class="tip">移库移位只在仓库内部搬移，全仓物理库存总量不变。</span>
+          新建移库单
+        </a-button>
+        <a-button type="primary" ghost v-auth="'wms:wms_warehouse_operations:add'" preIcon="ant-design:swap-outlined" @click="handleOpenAreaMigration" style="margin-left: 8px">
+          整库区批量迁移
+        </a-button>
+        <span class="tip">支持同仓库位整理与跨仓库存调拨，精准追溯商品与库位生命周期。</span>
       </template>
       <template #action="{ record }">
         <TableAction :actions="getTableAction(record)" :dropDownActions="getDropDownAction(record)" />
@@ -13,16 +16,18 @@
     </BasicTable>
 
     <WmsMoveModal @register="registerModal" @success="handleSuccess" />
+    <WmsAreaMigrationModal @register="registerAreaModal" @success="handleSuccess" />
 
     <!-- 作业单明细 -->
     <a-drawer v-model:visible="detailVisible" :title="detailTitle" width="1000" destroyOnClose>
       <a-descriptions :column="3" size="small" bordered style="margin-bottom: 16px">
         <a-descriptions-item label="作业单号">{{ detailData.jobCode || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="所属仓库">{{ detailData.warehouseId_dictText || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="调出仓库">{{ detailData.warehouseId_dictText || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="调入仓库">{{ detailData.targetWarehouseId_dictText || detailData.warehouseId_dictText || '-' }}</a-descriptions-item>
         <a-descriptions-item label="状态">{{ detailData.status_dictText || '-' }}</a-descriptions-item>
         <a-descriptions-item label="创建人">{{ detailData.createBy || '-' }}</a-descriptions-item>
         <a-descriptions-item label="创建时间">{{ detailData.createTime || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="备注">{{ detailData.remark || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="备注" :span="3">{{ detailData.remark || '-' }}</a-descriptions-item>
       </a-descriptions>
       <BasicTable @register="registerDetailTable" :canResize="false" :pagination="false" />
     </a-drawer>
@@ -30,18 +35,20 @@
 </template>
 
 <script lang="ts" name="wms-wmsMove" setup>
-  import { ref, reactive } from 'vue';
+  import { ref, reactive, nextTick } from 'vue';
   import { BasicTable, TableAction, useTable } from '/@/components/Table';
   import { useModal } from '/@/components/Modal';
   import { useListPage } from '/@/hooks/system/useListPage';
   import { useMessage } from '/@/hooks/web/useMessage';
   import WmsMoveModal from './components/WmsMoveModal.vue';
+  import WmsAreaMigrationModal from './components/WmsAreaMigrationModal.vue';
   import { columns, searchFormSchema, detailViewColumns } from './WmsMove.data';
   import { list, executeOperation, cancelOperation, queryDetails } from './WmsMove.api';
 
   const { createMessage } = useMessage();
   const queryParam = reactive<any>({});
   const [registerModal, { openModal }] = useModal();
+  const [registerAreaModal, { openModal: openAreaModal }] = useModal();
 
   const { tableContext } = useListPage({
     tableProps: {
@@ -79,7 +86,13 @@
   const currentOperationId = ref<number | undefined>(undefined);
   // 明细接口以 IPage 返回，@Dict 字段由后端翻译，这里直接当表格数据源
   const [registerDetailTable, { reload: reloadDetails }] = useTable({
-    api: (params) => queryDetails({ ...params, id: currentOperationId.value }),
+    api: (params) => {
+      if (!currentOperationId.value) {
+        return Promise.resolve({ records: [], total: 0 });
+      }
+      return queryDetails({ ...params, id: currentOperationId.value });
+    },
+    immediate: false,
     columns: detailViewColumns,
     showIndexColumn: false,
     showTableSetting: false,
@@ -89,6 +102,10 @@
 
   function handleAdd() {
     openModal(true, {});
+  }
+
+  function handleOpenAreaMigration() {
+    openAreaModal(true, {});
   }
 
   function handleSuccess() {
@@ -127,7 +144,9 @@
     detailTitle.value = `移库作业单 ${record.jobCode || ''}`;
     currentOperationId.value = record.id;
     detailVisible.value = true;
-    reloadDetails();
+    nextTick(() => {
+      reloadDetails();
+    });
   }
 
   function getTableAction(record) {

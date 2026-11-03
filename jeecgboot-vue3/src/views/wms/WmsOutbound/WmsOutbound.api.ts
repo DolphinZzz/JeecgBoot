@@ -11,6 +11,9 @@ enum Api {
   packageAndWeigh = '/wms/wmsOutboundOrder/packageAndWeigh',
   confirmShip = '/wms/wmsOutboundOrder/confirmShip',
   cancel = '/wms/wmsOutboundOrder/cancel',
+  queryPackages = '/wms/wmsOutboundOrder/queryPackages',
+  queryWeights = '/wms/wmsOutboundOrder/queryWeights',
+  querySns = '/wms/wmsOutboundOrder/querySns',
 }
 
 /**
@@ -72,3 +75,18 @@ export const cancelOutboundOrder = (id, reason) =>
     { url: Api.cancel, params: { id, reason } },
     { joinParamsToUrl: true, successMessageMode: 'none' },
   );
+
+/**
+ * 获取包装箱单列表
+ */
+export const queryPackages = (id) => defHttp.get({ url: Api.queryPackages, params: { id } });
+
+/**
+ * 获取称重记录列表
+ */
+export const queryWeights = (id) => defHttp.get({ url: Api.queryWeights, params: { id } });
+
+/**
+ * 获取SN追溯列表
+ */
+export const querySns = (id) => defHttp.get({ url: Api.querySns, params: { id } });

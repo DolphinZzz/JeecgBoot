@@ -24,9 +24,16 @@ public class WmsReviewConfirmForm implements Serializable {
     @Schema(description = "出库单ID", requiredMode = Schema.RequiredMode.REQUIRED)
     private Long outboundOrderId;
 
-    /** 复核明细清单 */
-    @NotEmpty(message = "复核明细不能为空")
-    @Schema(description = "复核明细清单", requiredMode = Schema.RequiredMode.REQUIRED)
+    /** 整单复核结果(1复核通过 2复核异常) */
+    @Schema(description = "整单复核结果(1复核通过 2复核异常)")
+    private Integer reviewStatus;
+
+    /** 复核说明/意见（异常时必填） */
+    @Schema(description = "复核说明/意见")
+    private String reviewRemark;
+
+    /** 复核明细清单（选填，整单快速复核可不传） */
+    @Schema(description = "复核明细清单")
     private List<WmsReviewLineItem> reviewLines;
 
     @Data

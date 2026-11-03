@@ -8,24 +8,22 @@
     </a-descriptions>
 
     <a-spin :spinning="loading">
-      <a-alert v-if="plan.strategyUsed" type="info" show-icon style="margin-bottom: 12px">
+      <a-alert v-if="plan.needCount !== undefined" type="info" show-icon style="margin-bottom: 12px">
         <template #message>
-          策略：<b>{{ strategyText[plan.strategyUsed] || plan.strategyUsed }}</b> ，商品分区：<b>{{
-            zoneText[plan.zoneType] || plan.zoneType || '-'
-          }}</b>
-          ，待上架 <b>{{ plan.needCount ?? 0 }}</b> 件
+          <span>
+            本次待上架 <b>{{ plan.needCount ?? 0 }}</b> 件，系统已自动分配推荐库位；如需调整可点击库位单元格更换。
+          </span>
         </template>
       </a-alert>
 
       <!-- 推荐为空 / 排不完时把真实原因摆出来：不给原因作业员只能猜 -->
       <a-alert v-if="plan.remainCount > 0" type="warning" show-icon style="margin-bottom: 12px">
         <template #message>
-          还有 <b>{{ plan.remainCount }}</b> 件没有合规库位，需人工指定库位上架。
-          <span v-if="plan.emptyReason">原因：{{ plan.emptyReason }}</span>
+          还有 <b>{{ plan.remainCount }}</b> 件未自动分配库位，需人工指定库位上架。
+          <span v-if="plan.emptyReason">（原因：{{ plan.emptyReason }}）</span>
         </template>
         <template #description>
-          点「选择库位」可以按库位编码、巷道/货架/层/位筛选本仓库位，逐个看剩余可放件数。
-          人工指定会跳过分区、温区、混放、容积承重校验（跨仓与禁用/盘点锁定库位仍然拦截）， 必须勾选「强制上架」并填写原因，记录会标记为强制上架留痕。
+          点击表格中的「选择库位」，选择空闲或同品同批次合规库位；如需特殊处理可勾选「强制上架」并填写原因。
         </template>
       </a-alert>
 
@@ -56,7 +54,7 @@
 
     <a-alert type="warning" show-icon style="margin-top: 12px">
       <template #message>
-        不勾选「强制上架」时，改库位会重新走一遍硬过滤（库位状态、分区匹配、存放条件、混放规则、容积承重），不通过会被拦下。
+        不勾选「强制上架」时，人工指定库位需满足：库位状态正常（非禁用/非盘点）、良品不良品库区隔离、存储温区匹配、禁止混放SKU与批次。
       </template>
     </a-alert>
 
@@ -69,7 +67,7 @@
   import { BasicModal, useModal, useModalInner } from '/@/components/Modal';
   import { JVxeTable } from '/@/components/jeecg/JVxeTable';
   import { useMessage } from '/@/hooks/web/useMessage';
-  import { confirmColumns, strategyText, zoneText } from '../WmsPutaway.data';
+  import { confirmColumns } from '../WmsPutaway.data';
   import { recommend, confirmPutaway, listLocaOptions } from '../WmsPutaway.api';
   import { queryDetails } from '../../WmsEntry/WmsEntry.api';
   import WmsLocaPickerModal from '../../components/WmsLocaPickerModal.vue';

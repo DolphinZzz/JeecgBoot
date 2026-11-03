@@ -92,5 +92,5 @@ public class WmsWarehouseOperationsDetails implements Serializable {
 
     /**类型(1来源 2目标)*/
     @Schema(description = "类型(1来源 2目标)", hidden = true)
-    private Integer category;
+    private Integer category = 1;
 }

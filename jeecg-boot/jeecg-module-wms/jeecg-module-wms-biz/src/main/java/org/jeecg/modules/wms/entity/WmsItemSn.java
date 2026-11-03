@@ -3,6 +3,7 @@ package org.jeecg.modules.wms.entity;
 import java.io.Serializable;
 import java.util.Date;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -41,6 +42,16 @@ public class WmsItemSn implements Serializable {
     @Dict(dictTable = "wms_item_sku_v", dicText = "text", dicCode = "id")
     @Schema(description = "规格ID")
     private Long skuId;
+
+    /**商品编码*/
+    @TableField(exist = false)
+    @Schema(description = "商品编码")
+    private String skuCode;
+
+    /**商品名称*/
+    @TableField(exist = false)
+    @Schema(description = "商品名称")
+    private String skuName;
 
     /**批次号*/
     @Schema(description = "批次号")
