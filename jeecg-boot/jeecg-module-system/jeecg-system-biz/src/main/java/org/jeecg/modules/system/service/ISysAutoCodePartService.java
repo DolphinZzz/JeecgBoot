@@ -1,0 +1,14 @@
+package org.jeecg.modules.system.service;
+
+import com.baomidou.mybatisplus.extension.service.IService;
+import org.jeecg.modules.system.entity.SysAutoCodePart;
+
+/**
+ * @Description: 系统编码规则组成表 服务接口
+ * @Author: jeecg-boot
+ * @Date: 2026-11-04
+ * @Version: V1.0
+ */
+public interface ISysAutoCodePartService extends IService<SysAutoCodePart> {
+
+}
