@@ -1,5 +1,6 @@
 import {defHttp} from '/@/utils/http/axios';
 import { useMessage } from "/@/hooks/web/useMessage";
+import { getAutoCode } from '/@/views/system/autocode/autoCode.api';
 
 const { createConfirm } = useMessage();
 
@@ -11,13 +12,12 @@ enum Api {
   deleteBatch = '/mes/mesWorkshop/deleteBatch',
   importExcel = '/mes/mesWorkshop/importExcel',
   exportXls = '/mes/mesWorkshop/exportXls',
-  getNextCode = '/mes/mesWorkshop/getNextWorkshopCode',
 }
 /**
- * 获取下一个车间编码 (WSxxxx, xxxx从1001开始)
+ * 获取下一个车间编码 (直接调用系统管理-编码规则统一接口，规则编码固定为 WORKSHOP_CODE)
  */
 export const getNextWorkshopCode = () =>
-  defHttp.get<string>({ url: Api.getNextCode });
+  getAutoCode('WORKSHOP_CODE');
 /**
  * 导出api
  * @param params

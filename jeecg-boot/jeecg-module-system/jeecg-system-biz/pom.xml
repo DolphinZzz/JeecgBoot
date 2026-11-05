@@ -62,6 +62,11 @@
             <artifactId>jeecg-boot-module-airag</artifactId>
             <version>${jeecgboot.version}</version>
         </dependency>
+        <!-- 分布式锁 Redisson -->
+        <dependency>
+            <groupId>org.jeecgframework.boot3</groupId>
+            <artifactId>jeecg-boot-starter-lock</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

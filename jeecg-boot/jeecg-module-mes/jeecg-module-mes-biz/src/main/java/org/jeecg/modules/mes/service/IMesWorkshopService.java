@@ -11,10 +11,4 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface IMesWorkshopService extends IService<MesWorkshop> {
 
-    /**
-     * 获取下一个车间编码，格式WSxxxx，xxxx为4位数字，从1001开始
-     *
-     * @return 车间编码
-     */
-    String getNextWorkshopCode();
 }

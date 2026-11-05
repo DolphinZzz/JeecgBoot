@@ -68,3 +68,15 @@ export const batchDeleteAutoCodeRule = (params, handleSuccess) => {
     },
   });
 };
+
+/**
+ * 根据规则编码生成编号
+ * @param ruleCode 规则编码（例如：WORKSHOP_CODE）
+ * @param inputCharacter 业务传入字符（可选，例如：WH01）
+ */
+export const getAutoCode = (ruleCode: string, inputCharacter?: string) => {
+  const url = inputCharacter
+    ? `/sys/autocode/get/${ruleCode}/${encodeURIComponent(inputCharacter)}`
+    : `/sys/autocode/get/${ruleCode}`;
+  return defHttp.get<string>({ url });
+};

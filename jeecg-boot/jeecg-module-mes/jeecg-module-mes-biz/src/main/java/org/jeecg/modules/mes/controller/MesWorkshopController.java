@@ -77,19 +77,6 @@ public class MesWorkshopController extends JeecgController<MesWorkshop, IMesWork
 	}
 
 	/**
-	 * 获取下一个车间编码
-	 * 格式: WSxxxx，xxxx为4位数字，从1001开始
-	 *
-	 * @return
-	 */
-	@Operation(summary="获取下一个车间编码")
-	@GetMapping(value = "/getNextWorkshopCode")
-	public Result<String> getNextWorkshopCode() {
-		String nextCode = mesWorkshopService.getNextWorkshopCode();
-		return Result.OK(nextCode);
-	}
-
-	/**
 	 *   添加
 	 *
 	 * @param mesWorkshop
@@ -100,11 +87,7 @@ public class MesWorkshopController extends JeecgController<MesWorkshop, IMesWork
 	@RequiresPermissions("mes:mes_workshop:add")
 	@PostMapping(value = "/add")
 	public Result<String> add(@RequestBody MesWorkshop mesWorkshop) {
-		if (oConvertUtils.isEmpty(mesWorkshop.getWorkshopCode())) {
-			mesWorkshop.setWorkshopCode(mesWorkshopService.getNextWorkshopCode());
-		}
 		mesWorkshopService.save(mesWorkshop);
-
 		return Result.OK("添加成功！");
 	}
 	

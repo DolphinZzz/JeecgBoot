@@ -1,0 +1,27 @@
+package org.jeecg.modules.system.service;
+
+/**
+ * @Description: 系统自动编码生成核心业务接口
+ * @Author: jeecg-boot
+ * @Date: 2026-11-04
+ * @Version: V1.0
+ */
+public interface ISysAutoCodeService {
+
+    /**
+     * 根据规则编码生成编号
+     *
+     * @param ruleCode 规则编码
+     * @return 生成的编号字符串
+     */
+    String generateCode(String ruleCode);
+
+    /**
+     * 根据规则编码和传入字符生成编号
+     *
+     * @param ruleCode 规则编码
+     * @param inputCharacter 传入字符
+     * @return 生成的编号字符串
+     */
+    String generateCode(String ruleCode, String inputCharacter);
+}
